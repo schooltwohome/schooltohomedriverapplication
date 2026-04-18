@@ -2,6 +2,8 @@ import { LucideIcon } from "lucide-react-native";
 import React, { useEffect, useRef } from "react";
 import { StyleSheet, TouchableOpacity, View, Animated } from "react-native";
 
+import { Theme } from "../../theme/theme";
+
 interface BottomTabItemProps {
   icon: LucideIcon;
   label: string;
@@ -55,7 +57,7 @@ export default function BottomTabItem({
       >
         <Icon
           size={22}
-          color={isActive ? "#FFFFFF" : "#94A3B8"}
+          color={isActive ? Theme.text : Theme.textMuted}
           strokeWidth={isActive ? 2.5 : 1.8}
         />
       </Animated.View>
@@ -88,22 +90,21 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   activeIconWrapper: {
-    backgroundColor: "#F59E0B",
-    // Glow shadow
-    shadowColor: "#F59E0B",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
+    backgroundColor: Theme.yellow,
+    shadowColor: Theme.yellowDark,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 8,
   },
   label: {
     fontSize: 11,
     fontWeight: "500",
-    color: "#94A3B8",
+    color: Theme.textMuted,
     letterSpacing: 0.3,
   },
   activeLabel: {
-    color: "#F59E0B",
-    fontWeight: "700",
+    color: Theme.text,
+    fontWeight: "800",
   },
 });

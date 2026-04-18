@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 import LoginHeader from "./components/LoginHeader";
 import LoginForm from "./components/LoginForm";
+import { useAuth, UserRole } from "../../context/AuthContext";
 
 /**
  * LoginScreen
@@ -18,10 +19,12 @@ import LoginForm from "./components/LoginForm";
  */
 export default function LoginScreen() {
   const router = useRouter();
+  const { login } = useAuth();
 
-  const handleLogin = () => {
+  const handleLogin = (role: UserRole) => {
     // Authentication logic bypassed for UI testing
-    console.log("Login submitted - Navigating to Home");
+    console.log(`Login submitted as ${role} - Navigating to Home`);
+    login(role);
     router.replace("/home" as any);
   };
 

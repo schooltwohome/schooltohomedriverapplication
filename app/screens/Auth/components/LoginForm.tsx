@@ -5,21 +5,25 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
 } from "react-native";
-import { Eye, EyeOff } from "lucide-react-native";
+import { Eye, EyeOff, Shield, HardHat } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
+import { UserRole } from "../../../context/AuthContext";
 
-
+const roles = [
+  { id: "driver", label: "Driver", icon: Shield },
+  { id: "helper", label: "Helper", icon: HardHat },
+] as const;
 
 interface LoginFormProps {
-  onLogin: () => void;
+  onLogin: (role: UserRole) => void;
 }
 
 export default function LoginForm({ onLogin }: LoginFormProps) {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<"driver" | "helper">("driver");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,13 +36,75 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
 
   const handleSubmit = () => {
     if (validate()) {
-      onLogin();
+      onLogin(selectedRole);
     }
   };
 
   return (
     <View style={styles.container}>
       {/* Push form down a bit from the header */}
+      {/* Role Selection Section */}
+      <View style={styles.roleSection}>
+        <Text style={styles.sectionLabel}>Select Your Role</Text>
+        <View style={styles.rolesRow}>
+          {roles.map((role) => {
+            const isSelected = selectedRole === role.id;
+            const RoleIcon = role.icon;
+            
+            return (
+              <TouchableOpacity
+                key={role.id}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSelectedRole(role.id as any);
+                }}
+                activeOpacity={0.7}
+                style={[
+                  styles.roleCard,
+                  isSelected
+                    ? role.id === "driver"
+                      ? {
+                          borderColor: "#38BDF8",
+                          backgroundColor: "rgba(56, 189, 248, 0.12)",
+                        }
+                      : {
+                          borderColor: "#F59E0B",
+                          backgroundColor: "rgba(245, 158, 11, 0.12)",
+                        }
+                    : {
+                        borderColor: "#E2E8F0",
+                        backgroundColor: "#FFFFFF",
+                      },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.roleIconBox,
+                    isSelected
+                      ? {
+                          backgroundColor:
+                            role.id === "driver" ? "#38BDF8" : "#F59E0B",
+                        }
+                      : { backgroundColor: "#F1F5F9" },
+                  ]}
+                >
+                  <RoleIcon 
+                    size={20} 
+                    color={isSelected ? "#FFFFFF" : "#64748B"} 
+                  />
+                </View>
+                <Text style={[
+                  styles.roleTitle,
+                  { color: isSelected ? "#0F172A" : "#64748B" }
+                ]}>
+                  {role.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
       <View style={styles.formWrapper}>
 
         {/* Email / Phone Field */}
@@ -155,8 +221,42 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   formWrapper: {
-    marginTop: 56, // << pushes the fields down from the header
+    marginTop: 24, // << spacing after role selector
     gap: 0,
+  },
+  roleSection: {
+    marginTop: 32,
+    marginBottom: 8,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
+    marginBottom: 16,
+    letterSpacing: 0.3,
+  },
+  rolesRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  roleCard: {
+    flex: 1,
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 2,
+  },
+  roleIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  roleTitle: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   fieldGroup: {
     marginBottom: 20,

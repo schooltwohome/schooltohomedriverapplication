@@ -6,19 +6,18 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Platform
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Mail, Smartphone, ArrowRight, Check } from "lucide-react-native";
+import { Mail, Smartphone, ArrowRight, Lock, Command } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import Animated, { 
   FadeInDown, 
   FadeOutUp, 
-  Layout, 
+  LinearTransition,
   FadeIn,
-  FadeOut,
-  LinearTransition
+  FadeOut
 } from "react-native-reanimated";
-
 
 interface OTPLoginFormProps {
   onLogin: (email: string, otp: string) => void;
@@ -34,7 +33,7 @@ export default function OTPLoginForm({ onLogin }: OTPLoginFormProps) {
   const [timer, setTimer] = useState(0);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: any;
     if (timer > 0) {
       interval = setInterval(() => {
         setTimer((prev) => prev - 1);
@@ -55,12 +54,10 @@ export default function OTPLoginForm({ onLogin }: OTPLoginFormProps) {
     if (validateEmail()) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setIsLoading(true);
-      // Mocking API call
-
       setTimeout(() => {
         setIsLoading(false);
         setOtpSent(true);
-        setTimer(60); // 1 minute countdown
+        setTimer(60);
         setErrors((e) => ({ ...e, email: "" }));
       }, 1500);
     }
@@ -76,15 +73,23 @@ export default function OTPLoginForm({ onLogin }: OTPLoginFormProps) {
     onLogin(email, otp);
   };
 
-
   return (
     <View style={styles.container}>
       <Animated.View layout={LinearTransition} style={styles.formWrapper}>
+        <View style={styles.headerSection}>
+          <Text style={styles.title}>Secure Login</Text>
+          <Text style={styles.subtitle}>
+            {otpSent 
+              ? "Enter the verification code sent to your device" 
+              : "Verify your identity using a one-time password"}
+          </Text>
+        </View>
 
         {/* Email / Phone Field */}
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>Email / Phone</Text>
           <View style={styles.inputWrapper}>
+            <Smartphone size={18} color="#94A3B8" style={styles.inputIcon} />
             <TextInput
               placeholder="Enter your email or phone"
               value={email}
@@ -96,7 +101,6 @@ export default function OTPLoginForm({ onLogin }: OTPLoginFormProps) {
               placeholderTextColor="#94A3B8"
               keyboardType="email-address"
               autoCapitalize="none"
-              autoCorrect={false}
               editable={!otpSent}
             />
             {otpSent && (
@@ -111,12 +115,9 @@ export default function OTPLoginForm({ onLogin }: OTPLoginFormProps) {
               </TouchableOpacity>
             )}
           </View>
-          {errors.email ? (
-            <Text style={styles.errorText}>{errors.email}</Text>
-          ) : null}
+          {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
         </View>
 
-        {/* Conditional Buttons / Fields with Smooth Transitions */}
         {!otpSent ? (
           <Animated.View 
             entering={FadeInDown.duration(400)} 
@@ -133,19 +134,18 @@ export default function OTPLoginForm({ onLogin }: OTPLoginFormProps) {
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <>
-                  <Text style={styles.sendOtpText}>Send OTP</Text>
+                  <Text style={styles.sendOtpText}>Send Verification Code</Text>
                   <ArrowRight size={18} color="#FFFFFF" />
                 </>
               )}
             </TouchableOpacity>
           </Animated.View>
         ) : (
-          /* OTP Field - only shown after sending */
           <Animated.View 
             entering={FadeInDown.springify()} 
             exiting={FadeOutUp}
             layout={LinearTransition}
-            style={[styles.fieldGroup, { marginTop: 10 }]}
+            style={styles.fieldGroup}
           >
             <View style={styles.labelRow}>
               <Text style={styles.label}>Verification Code</Text>
@@ -157,19 +157,22 @@ export default function OTPLoginForm({ onLogin }: OTPLoginFormProps) {
                 </TouchableOpacity>
               )}
             </View>
-            <TextInput
-              placeholder="Enter 4-digit code"
-              value={otp}
-              onChangeText={(text) => {
-                setOtp(text.replace(/[^0-9]/g, ""));
-                if (errors.otp) setErrors((e) => ({ ...e, otp: "" }));
-              }}
-              style={[styles.input, styles.otpInput, errors.otp ? styles.inputError : null]}
-              placeholderTextColor="#94A3B8"
-              keyboardType="number-pad"
-              maxLength={4}
-              autoFocus={true}
-            />
+            <View style={styles.inputWrapper}>
+              <Command size={18} color="#94A3B8" style={styles.inputIcon} />
+              <TextInput
+                placeholder="4-digit code"
+                value={otp}
+                onChangeText={(text) => {
+                  setOtp(text.replace(/[^0-9]/g, ""));
+                  if (errors.otp) setErrors((e) => ({ ...e, otp: "" }));
+                }}
+                style={[styles.input, styles.otpInput, errors.otp ? styles.inputError : null]}
+                placeholderTextColor="#94A3B8"
+                keyboardType="number-pad"
+                maxLength={4}
+                autoFocus={true}
+              />
+            </View>
             {errors.otp ? (
               <Animated.Text entering={FadeIn} exiting={FadeOut} style={styles.errorText}>
                 {errors.otp}
@@ -178,10 +181,8 @@ export default function OTPLoginForm({ onLogin }: OTPLoginFormProps) {
           </Animated.View>
         )}
 
-
         <View style={styles.optionsRow}>
           <TouchableOpacity 
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               router.back();
@@ -189,11 +190,8 @@ export default function OTPLoginForm({ onLogin }: OTPLoginFormProps) {
           >
             <Text style={styles.linkBlue}>Back to Password Login</Text>
           </TouchableOpacity>
-
         </View>
       </Animated.View>
-
-      {/* Sign In Button */}
 
       <View style={styles.buttonSection}>
         <TouchableOpacity 
@@ -202,13 +200,13 @@ export default function OTPLoginForm({ onLogin }: OTPLoginFormProps) {
           disabled={!otpSent || otp.length < 4}
           activeOpacity={0.85}
         >
-          <Text style={styles.signInText}>Sign In</Text>
+          <Text style={styles.signInText}>Confirm & Sign In</Text>
         </TouchableOpacity>
 
         <View style={styles.signUpRow}>
-          <Text style={styles.signUpGray}>Don&apos;t have an account? </Text>
+          <Text style={styles.signUpGray}>Need help? </Text>
           <TouchableOpacity>
-            <Text style={styles.linkBlue}>Contact Admin</Text>
+            <Text style={styles.linkBlue}>Contact Supervisor</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -221,9 +219,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 24,
   },
+  headerSection: {
+    marginBottom: 32,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#0F172A",
+    marginBottom: 8,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: "#64748B",
+    lineHeight: 22,
+  },
   formWrapper: {
-    marginTop: 56,
-    gap: 0,
+    marginTop: 20,
   },
   fieldGroup: {
     marginBottom: 20,
@@ -232,36 +244,39 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   label: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#0F172A",
-    letterSpacing: 0.2,
   },
   inputWrapper: {
-    position: "relative",
-  },
-  input: {
-    height: 50,
-    paddingHorizontal: 16,
-    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    height: 54,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
     borderWidth: 1.5,
     borderColor: "#E2E8F0",
-    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
+  input: {
+    flex: 1,
     fontSize: 15,
     color: "#0F172A",
+    fontWeight: "500",
   },
   otpInput: {
-    textAlign: "center",
     fontSize: 20,
     fontWeight: "700",
-    letterSpacing: 8,
+    letterSpacing: 4,
   },
   inputError: {
     borderColor: "#EF4444",
-    backgroundColor: "#FFF5F5",
   },
   errorText: {
     marginTop: 4,
@@ -270,75 +285,72 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
   changeButton: {
-    position: "absolute",
-    right: 14,
-    top: 15,
+    paddingHorizontal: 12,
   },
   changeText: {
     fontSize: 13,
     color: "#38BDF8",
-    fontWeight: "600",
+    fontWeight: "700",
   },
   sendOtpButton: {
     width: "100%",
-    height: 50,
-    borderRadius: 14,
+    height: 56,
+    borderRadius: 16,
     backgroundColor: "#14B8A6",
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     marginTop: 8,
     shadowColor: "#14B8A6",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
   },
   sendOtpText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     color: "#FFFFFF",
   },
   timerText: {
     fontSize: 12,
     color: "#64748B",
-    fontWeight: "500",
+    fontWeight: "600",
   },
   resendText: {
     fontSize: 12,
     color: "#14B8A6",
-    fontWeight: "600",
+    fontWeight: "700",
   },
   optionsRow: {
     flexDirection: "row",
     justifyContent: "center",
-    alignItems: "center",
-    marginTop: 12,
+    marginTop: 16,
   },
   linkBlue: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#38BDF8",
-    fontWeight: "600",
+    fontWeight: "700",
   },
   buttonSection: {
-    marginTop: 36,
+    marginTop: 40,
   },
   signInButton: {
     width: "100%",
-    height: 50,
-    borderRadius: 14,
+    height: 56,
+    borderRadius: 16,
     backgroundColor: "#0F172A",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
   },
   disabledButton: {
-    backgroundColor: "#94A3B8",
+    backgroundColor: "#CBD5E1",
     shadowOpacity: 0,
     elevation: 0,
   },
@@ -346,16 +358,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#FFFFFF",
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
   signUpRow: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 16,
+    marginTop: 20,
   },
   signUpGray: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#64748B",
   },
 });

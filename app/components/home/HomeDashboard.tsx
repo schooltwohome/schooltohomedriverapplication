@@ -1,48 +1,106 @@
-import React from "react";
-import { ScrollView, StyleSheet } from "react-native";
-import BusStatusCard from "./BusStatusCard";
-import ChildStatusCard from "./ChildStatusCard";
-import ActivityTimeline from "./ActivityTimeline";
+import React, { useCallback, useState } from "react";
+import { View, StyleSheet } from "react-native";
+
+import { Theme } from "../../theme/theme";
+import { ClipboardCheck, Home, User } from "lucide-react-native";
+
+import { useAuth } from "../../context/AuthContext";
+import { useHelperAssignment } from "../../context/HelperAssignmentContext";
+import DriverDashboard from "./DriverDashboard";
+import HomeHeader from "./HomeHeader";
+import BottomTabs, { BottomTabDefinition } from "../navigation/BottomTabs";
+import HelperAssignmentWizard from "../helper/HelperAssignmentWizard";
+import HelperHomeTab from "../helper/HelperHomeTab";
+import HelperAttendanceTab from "../helper/HelperAttendanceTab";
+import HelperProfileTab from "../helper/HelperProfileTab";
+
+const HELPER_TABS: BottomTabDefinition[] = [
+  { id: "home", label: "Home", icon: Home },
+  { id: "attendance", label: "Attendance", icon: ClipboardCheck },
+  { id: "profile", label: "Profile", icon: User },
+];
 
 export default function HomeDashboard() {
+  const { role } = useAuth();
+  const { assignment, setAssignment, clearAssignment, hasAssignment } = useHelperAssignment();
+  const [activeTab, setActiveTab] = useState("home");
+  const [driverLiveTrip, setDriverLiveTrip] = useState(false);
+
+  const handleDriverLiveChange = useCallback((live: boolean) => {
+    setDriverLiveTrip(live);
+  }, []);
+
+  const helperNeedsSetup = role === "helper" && !hasAssignment;
+  const hideHomeChrome = (role === "driver" && driverLiveTrip) || helperNeedsSetup;
+
+  const showBottomTabs =
+    role !== "driver" && (role !== "helper" || hasAssignment);
+
+  const headerSubtitle =
+    role === "driver"
+      ? "Routes, schedules, and live trips"
+      : hasAssignment && assignment
+        ? `${assignment.bus.name} · ${assignment.route.name}`
+        : "Select your bus and route to begin";
+
   return (
-    <ScrollView
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-    >
-      <BusStatusCard
-        route="Route 12 - Morning Trip"
-        distance="2.5 km away"
-        eta="10 mins"
-        onTrackPress={() => console.log("Tracking...")}
-      />
+    <View style={styles.root}>
+      {!hideHomeChrome && (
+        <HomeHeader
+          greeting="Welcome back"
+          userName={headerSubtitle}
+          role={role}
+        />
+      )}
 
-      <ChildStatusCard 
-        name="Alex Johnson" 
-        className="Grade 4-B" 
-        isOnBus={true} 
-      />
+      <View style={[styles.main, hideHomeChrome && styles.mainLiveTrip]}>
+        {role === "driver" ? (
+          <DriverDashboard onLiveTripChange={handleDriverLiveChange} />
+        ) : helperNeedsSetup ? (
+          <HelperAssignmentWizard
+            onComplete={(bus, route) => {
+              setAssignment(bus, route);
+              setActiveTab("home");
+            }}
+          />
+        ) : assignment ? (
+          <>
+            {activeTab === "home" && <HelperHomeTab />}
+            {activeTab === "attendance" && <HelperAttendanceTab />}
+            {activeTab === "profile" && (
+              <HelperProfileTab
+                assignment={assignment}
+                onChangeAssignment={() => {
+                  clearAssignment();
+                  setActiveTab("home");
+                }}
+              />
+            )}
+          </>
+        ) : null}
+      </View>
 
-      <ChildStatusCard 
-        name="Sarah Johnson" 
-        className="Grade 2-A" 
-        isOnBus={false} 
-      />
-
-      <ActivityTimeline 
-        activities={[
-          { id: "1", title: "Bus departed from depot", time: "7:30 AM", type: "bus", description: "Route 12 morning trip started." },
-          { id: "2", title: "Liam boarded at Stop #12", time: "7:45 AM", type: "board", description: "Checked in via student ID card." },
-          { id: "3", title: "Arrived at school", time: "8:05 AM", type: "arrive", description: "Safe arrival at the main campus." },
-        ]} 
-      />
-    </ScrollView>
+      {!hideHomeChrome && showBottomTabs && (
+        <BottomTabs
+          activeTab={activeTab}
+          onTabPress={setActiveTab}
+          tabs={role === "helper" ? HELPER_TABS : undefined}
+        />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContent: {
+  root: {
+    flex: 1,
+    backgroundColor: Theme.bg,
+  },
+  main: {
+    flex: 1,
     paddingHorizontal: 24,
-    paddingBottom: 120,
+  },
+  mainLiveTrip: {
+    paddingHorizontal: 0,
   },
 });

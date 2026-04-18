@@ -46,7 +46,8 @@
           "locationAlwaysPermission": "Allow SchoolToHome to use your location to track your relative distance to the school bus.",
           "locationWhenInUsePermission": "Allow SchoolToHome to use your location to track your relative distance to the school bus."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

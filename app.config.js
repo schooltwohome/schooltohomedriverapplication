@@ -1,4 +1,10 @@
 module.exports = ({ config }) => {
+  const googleMapsKey =
+    process.env.GOOGLE_MAPS_API_KEY?.trim() ||
+    process.env.GOOGLE_MAPS_ANDROID_API_KEY?.trim() ||
+    process.env.GOOGLE_MAPS_IOS_API_KEY?.trim() ||
+    "";
+
   const baseExpo = {
     ...(config || {}),
     name: "Driver Helper App",
@@ -13,6 +19,13 @@ module.exports = ({ config }) => {
     ios: {
       supportsTablet: true,
       ...((config && config.ios) || {}),
+      config: {
+        ...(((config && config.ios) || {}).config || {}),
+        googleMapsApiKey:
+          process.env.GOOGLE_MAPS_IOS_API_KEY?.trim() ||
+          process.env.GOOGLE_MAPS_API_KEY?.trim() ||
+          googleMapsKey,
+      },
     },
 
     android: {
@@ -31,6 +44,16 @@ module.exports = ({ config }) => {
       ],
       package: "com.school2home.driverhelper",
       ...((config && config.android) || {}),
+      config: {
+        ...(((config && config.android) || {}).config || {}),
+        googleMaps: {
+          ...((((config && config.android) || {}).config || {}).googleMaps || {}),
+          apiKey:
+            process.env.GOOGLE_MAPS_ANDROID_API_KEY?.trim() ||
+            process.env.GOOGLE_MAPS_API_KEY?.trim() ||
+            googleMapsKey,
+        },
+      },
     },
 
     web: {
@@ -72,10 +95,11 @@ module.exports = ({ config }) => {
   return {
     ...baseExpo,
 
-      
+
     experiments: {
       typedRoutes: true,
       reactCompiler: false,
     },
   };
 };
+

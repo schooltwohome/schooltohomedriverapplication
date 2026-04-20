@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Modal, View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
+import { Modal, View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Linking, Alert } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { X } from "lucide-react-native";
+import { Navigation, X } from "lucide-react-native";
 import type { TripCoords } from "../types";
 
 interface Props {
@@ -27,6 +27,25 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
   const mapRef = useRef<MapView>(null);
   const [driver, setDriver] = useState<TripCoords | null>(null);
   const [waitingGps, setWaitingGps] = useState(true);
+
+  const openTurnByTurn = async () => {
+    const lat = stopCoordinate.latitude;
+    const lng = stopCoordinate.longitude;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+      `${lat},${lng}`
+    )}&travelmode=driving`;
+
+    try {
+      const ok = await Linking.canOpenURL(url);
+      if (!ok) {
+        Alert.alert("Navigation", "Could not open maps on this device.");
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert("Navigation", "Could not open maps on this device.");
+    }
+  };
 
   useEffect(() => {
     if (!visible) {
@@ -151,6 +170,19 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
           </TouchableOpacity>
         </View>
 
+        <View style={[styles.navCtaWrap, { bottom: Math.max(insets.bottom, 16) + 20 }]}>
+          <TouchableOpacity
+            style={styles.navCta}
+            onPress={openTurnByTurn}
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel="Start navigation in Google Maps"
+          >
+            <Navigation size={18} color="#0F172A" />
+            <Text style={styles.navCtaText}>Start navigation</Text>
+          </TouchableOpacity>
+        </View>
+
         {waitingGps && !driver ? (
           <View style={[styles.loading, { bottom: Math.max(insets.bottom, 16) + 24 }]}>
             <ActivityIndicator size="small" color="#0F172A" />
@@ -227,5 +259,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#334155",
+  },
+  navCtaWrap: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+  },
+  navCta: {
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: "#FDE047",
+    borderWidth: 1.5,
+    borderColor: "#F59E0B",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  navCtaText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0F172A",
   },
 });

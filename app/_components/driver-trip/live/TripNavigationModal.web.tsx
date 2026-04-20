@@ -1,7 +1,7 @@
 import React from "react";
-import { Modal, View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { Modal, View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { X } from "lucide-react-native";
+import { Navigation, X } from "lucide-react-native";
 import type { TripCoords } from "../types";
 
 interface Props {
@@ -12,8 +12,16 @@ interface Props {
 }
 
 /** Web: maps are native-only; show copy instead of importing react-native-maps. */
-export default function TripNavigationModal({ visible, onClose, stopName }: Props) {
+export default function TripNavigationModal({ visible, onClose, stopName, stopCoordinate }: Props) {
   const insets = useSafeAreaInsets();
+  const dest = `${stopCoordinate.latitude},${stopCoordinate.longitude}`;
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}&travelmode=driving`;
+
+  const open = () => {
+    Linking.openURL(url).catch(() => {
+      Alert.alert("Navigation", "Could not open Google Maps in this browser.");
+    });
+  };
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -28,7 +36,14 @@ export default function TripNavigationModal({ visible, onClose, stopName }: Prop
         </TouchableOpacity>
         <Text style={styles.webTitle}>Navigation map</Text>
         <Text style={styles.webBody}>
-          Turn-by-turn preview runs on iOS and Android. On web, use device maps for {stopName}.
+          Turn-by-turn navigation runs on iOS and Android. On web, open Google Maps directions for {stopName}.
+        </Text>
+        <TouchableOpacity style={styles.openBtn} onPress={open} activeOpacity={0.88}>
+          <Navigation size={18} color="#0F172A" />
+          <Text style={styles.openBtnText}>Open Google Maps</Text>
+        </TouchableOpacity>
+        <Text style={styles.linkHint} numberOfLines={2}>
+          {url}
         </Text>
       </View>
     </Modal>
@@ -61,5 +76,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#475569",
     lineHeight: 24,
+  },
+  openBtn: {
+    marginTop: 18,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "#FDE047",
+    borderWidth: 1.5,
+    borderColor: "#F59E0B",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10,
+  },
+  openBtnText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0F172A",
+  },
+  linkHint: {
+    marginTop: 12,
+    fontSize: 12,
+    color: "#64748B",
   },
 });

@@ -5,58 +5,108 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
 } from "react-native";
-import { Eye, EyeOff, Shield, HardHat } from "lucide-react-native";
+import { Eye, EyeOff, Shield, HardHat, KeyRound, MessageSquare } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { UserRole } from "../../../context/AuthContext";
+import type { UserRole } from "../../../types/roles";
 
 const roles = [
-  { id: "driver", label: "Driver", icon: Shield },
-  { id: "helper", label: "Helper", icon: HardHat },
-] as const;
+  { id: "driver" as const, label: "Driver", icon: Shield },
+  { id: "helper" as const, label: "Helper", icon: HardHat },
+];
+
+export type SignInMethod = "password" | "otp";
 
 interface LoginFormProps {
-  onLogin: (role: UserRole) => void;
+  onSendOtp: (identifier: string) => Promise<void>;
+  onLogin: (
+    identifier: string,
+    passwordOrOtp: string,
+    expectedRole: UserRole
+  ) => Promise<void>;
+  loading: boolean;
+  otpSending: boolean;
 }
 
-export default function LoginForm({ onLogin }: LoginFormProps) {
+export default function LoginForm({
+  onSendOtp,
+  onLogin,
+  loading,
+  otpSending,
+}: LoginFormProps) {
   const router = useRouter();
-  const [showPassword, setShowPassword] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<"driver" | "helper">("driver");
-
-  const [email, setEmail] = useState("");
+  const [signInMethod, setSignInMethod] = useState<SignInMethod>("password");
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [otpVisible, setOtpVisible] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<UserRole>("driver");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [errors, setErrors] = useState({ email: "", password: "" });
+  const [otp, setOtp] = useState("");
+  const [errors, setErrors] = useState({
+    identifier: "",
+    secret: "",
+  });
 
-  const validate = (): boolean => {
-    // Validation bypassed for UI testing
+  const validateIdentifier = (): boolean => {
+    if (!identifier.trim()) {
+      setErrors((e) => ({ ...e, identifier: "Email or phone is required." }));
+      return false;
+    }
     return true;
   };
 
-  const handleSubmit = () => {
-    if (validate()) {
-      onLogin(selectedRole);
-    }
+  const handleSendOtp = async () => {
+    if (!validateIdentifier()) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    await onSendOtp(identifier);
+    setErrors((e) => ({ ...e, identifier: "" }));
   };
+
+  const handleSubmit = async () => {
+    if (!validateIdentifier()) return;
+    const secret =
+      signInMethod === "password" ? password.trim() : otp.trim();
+    if (!secret) {
+      setErrors((e) => ({
+        ...e,
+        secret:
+          signInMethod === "password"
+            ? "Enter your password."
+            : "Enter the OTP you received.",
+      }));
+      return;
+    }
+    if (signInMethod === "otp" && secret.length < 4) {
+      setErrors((e) => ({
+        ...e,
+        secret: "OTP is usually 4 digits or more.",
+      }));
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await onLogin(identifier, secret, selectedRole);
+  };
+
+  const otpHint =
+    identifier.trim().includes("@") ? "Check your email inbox" : "Check SMS";
 
   return (
     <View style={styles.container}>
-      {/* Push form down a bit from the header */}
-      {/* Role Selection Section */}
       <View style={styles.roleSection}>
-        <Text style={styles.sectionLabel}>Select Your Role</Text>
+        <Text style={styles.sectionLabel}>Select your role</Text>
         <View style={styles.rolesRow}>
           {roles.map((role) => {
             const isSelected = selectedRole === role.id;
             const RoleIcon = role.icon;
-            
+
             return (
               <TouchableOpacity
                 key={role.id}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setSelectedRole(role.id as any);
+                  setSelectedRole(role.id);
                 }}
                 activeOpacity={0.7}
                 style={[
@@ -82,21 +132,19 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
                     styles.roleIconBox,
                     isSelected
                       ? {
-                          backgroundColor:
-                            role.id === "driver" ? "#38BDF8" : "#F59E0B",
+                          backgroundColor: role.id === "driver" ? "#38BDF8" : "#F59E0B",
                         }
                       : { backgroundColor: "#F1F5F9" },
                   ]}
                 >
-                  <RoleIcon 
-                    size={20} 
-                    color={isSelected ? "#FFFFFF" : "#64748B"} 
-                  />
+                  <RoleIcon size={20} color={isSelected ? "#FFFFFF" : "#64748B"} />
                 </View>
-                <Text style={[
-                  styles.roleTitle,
-                  { color: isSelected ? "#0F172A" : "#64748B" }
-                ]}>
+                <Text
+                  style={[
+                    styles.roleTitle,
+                    { color: isSelected ? "#0F172A" : "#64748B" },
+                  ]}
+                >
                   {role.label}
                 </Text>
               </TouchableOpacity>
@@ -105,109 +153,237 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
         </View>
       </View>
 
-      <View style={styles.formWrapper}>
-
-        {/* Email / Phone Field */}
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Email / Phone</Text>
-          <TextInput
-            placeholder="Enter your email or phone"
-            value={email}
-            onChangeText={(text) => {
-              setEmail(text);
-              if (errors.email) setErrors((e) => ({ ...e, email: "" }));
+      <View style={styles.methodSection}>
+        <Text style={styles.sectionLabel}>Sign in with</Text>
+        <View style={styles.methodRow}>
+          <TouchableOpacity
+            style={[
+              styles.methodChip,
+              signInMethod === "password" && styles.methodChipActive,
+            ]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              setSignInMethod("password");
+              setErrors({ identifier: "", secret: "" });
             }}
-            style={[styles.input, errors.email ? styles.inputError : null]}
+            activeOpacity={0.85}
+          >
+            <KeyRound
+              size={18}
+              color={signInMethod === "password" ? "#0F172A" : "#64748B"}
+            />
+            <Text
+              style={[
+                styles.methodChipText,
+                signInMethod === "password" && styles.methodChipTextActive,
+              ]}
+            >
+              Password
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.methodChip,
+              signInMethod === "otp" && styles.methodChipActiveOtp,
+            ]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              setSignInMethod("otp");
+              setErrors({ identifier: "", secret: "" });
+            }}
+            activeOpacity={0.85}
+          >
+            <MessageSquare
+              size={18}
+              color={signInMethod === "otp" ? "#0F172A" : "#64748B"}
+            />
+            <Text
+              style={[
+                styles.methodChipText,
+                signInMethod === "otp" && styles.methodChipTextActive,
+              ]}
+            >
+              Email / SMS OTP
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.methodHint}>
+          {signInMethod === "password"
+            ? "Use the password your school set on your account."
+            : `Request a code — ${otpHint.toLowerCase()}. (No password on file? Use OTP.)`}
+        </Text>
+      </View>
+
+      <View style={styles.formWrapper}>
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>Email or phone</Text>
+          <TextInput
+            placeholder="Registered email or mobile"
+            value={identifier}
+            onChangeText={(text) => {
+              setIdentifier(text);
+              if (errors.identifier) setErrors((e) => ({ ...e, identifier: "" }));
+            }}
+            style={[styles.input, errors.identifier ? styles.inputError : null]}
             placeholderTextColor="#94A3B8"
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="next"
-            textContentType="emailAddress"
+            textContentType="username"
+            editable={!loading}
           />
-          {errors.email ? (
-            <Text style={styles.errorText}>{errors.email}</Text>
+          {errors.identifier ? (
+            <Text style={styles.errorText}>{errors.identifier}</Text>
           ) : null}
         </View>
 
-        {/* Password Field */}
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Password</Text>
-          <View style={styles.passwordWrapper}>
-            <TextInput
-              placeholder="Enter your password"
-              value={password}
-              onChangeText={(text) => {
-                setPassword(text);
-                if (errors.password) setErrors((e) => ({ ...e, password: "" }));
-              }}
-              secureTextEntry={!showPassword}
-              style={[
-                styles.input,
-                styles.passwordInput,
-                errors.password ? styles.inputError : null,
-              ]}
-              placeholderTextColor="#94A3B8"
-              returnKeyType="done"
-              onSubmitEditing={handleSubmit}
-              textContentType="password"
-            />
+        {signInMethod === "otp" ? (
+          <>
             <TouchableOpacity
-              onPress={() => setShowPassword(!showPassword)}
-              style={styles.eyeButton}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.sendOtpBtn}
+              onPress={handleSendOtp}
+              disabled={otpSending || loading}
+              activeOpacity={0.85}
             >
-              {showPassword ? (
-                <EyeOff size={20} color="#64748B" />
+              {otpSending ? (
+                <ActivityIndicator color="#0F172A" />
               ) : (
-                <Eye size={20} color="#64748B" />
+                <Text style={styles.sendOtpText}>Send OTP</Text>
               )}
             </TouchableOpacity>
-          </View>
-          {errors.password ? (
-            <Text style={styles.errorText}>{errors.password}</Text>
-          ) : null}
-        </View>
 
-        {/* Forgot / OTP Row */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>One-time password</Text>
+              <View style={styles.passwordWrapper}>
+                <TextInput
+                  placeholder="Enter OTP"
+                  value={otp}
+                  onChangeText={(text) => {
+                    setOtp(text);
+                    if (errors.secret) setErrors((e) => ({ ...e, secret: "" }));
+                  }}
+                  secureTextEntry={!otpVisible}
+                  style={[
+                    styles.input,
+                    styles.passwordInput,
+                    errors.secret ? styles.inputError : null,
+                  ]}
+                  placeholderTextColor="#94A3B8"
+                  returnKeyType="done"
+                  onSubmitEditing={handleSubmit}
+                  textContentType="oneTimeCode"
+                  keyboardType="number-pad"
+                  editable={!loading}
+                />
+                <TouchableOpacity
+                  onPress={() => setOtpVisible(!otpVisible)}
+                  style={styles.eyeButton}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  {otpVisible ? (
+                    <EyeOff size={20} color="#64748B" />
+                  ) : (
+                    <Eye size={20} color="#64748B" />
+                  )}
+                </TouchableOpacity>
+              </View>
+              {errors.secret ? (
+                <Text style={styles.errorText}>{errors.secret}</Text>
+              ) : null}
+            </View>
+          </>
+        ) : (
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.passwordWrapper}>
+              <TextInput
+                placeholder="Your account password"
+                value={password}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (errors.secret) setErrors((e) => ({ ...e, secret: "" }));
+                }}
+                secureTextEntry={!passwordVisible}
+                style={[
+                  styles.input,
+                  styles.passwordInput,
+                  errors.secret ? styles.inputError : null,
+                ]}
+                placeholderTextColor="#94A3B8"
+                returnKeyType="done"
+                onSubmitEditing={handleSubmit}
+                textContentType="password"
+                autoCapitalize="none"
+                editable={!loading}
+              />
+              <TouchableOpacity
+                onPress={() => setPasswordVisible(!passwordVisible)}
+                style={styles.eyeButton}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                {passwordVisible ? (
+                  <EyeOff size={20} color="#64748B" />
+                ) : (
+                  <Eye size={20} color="#64748B" />
+                )}
+              </TouchableOpacity>
+            </View>
+            {errors.secret ? (
+              <Text style={styles.errorText}>{errors.secret}</Text>
+            ) : null}
+          </View>
+        )}
+
         <View style={styles.optionsRow}>
-          <TouchableOpacity 
+          <TouchableOpacity
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               router.push("/screens/Auth/ForgotPasswordScreen");
             }}
           >
-            <Text style={styles.linkBlue}>Forgot Password?</Text>
+            <Text style={styles.linkBlue}>Help</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               router.push("/screens/Auth/OTPLoginScreen");
             }}
           >
-            <Text style={styles.linkTeal}>Login with OTP</Text>
+            <Text style={styles.linkTeal}>Shortcuts</Text>
           </TouchableOpacity>
-
-
         </View>
       </View>
 
-      {/* Sign In Button */}
       <View style={styles.buttonSection}>
-        <TouchableOpacity style={styles.signInButton} onPress={handleSubmit} activeOpacity={0.85}>
-          <Text style={styles.signInText}>Sign In</Text>
+        <TouchableOpacity
+          style={[styles.signInButton, loading && styles.signInButtonDisabled]}
+          onPress={handleSubmit}
+          activeOpacity={0.85}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.signInText}>Sign in</Text>
+          )}
         </TouchableOpacity>
 
         <View style={styles.signUpRow}>
-          <Text style={styles.signUpGray}>Don&apos;t have an account? </Text>
-          <TouchableOpacity 
-            onPress={() => router.push("/screens/Auth/SignupScreen" as any)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          <Text style={styles.signUpGray}>Need access? Ask your school admin.</Text>
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/screens/Auth/SignupScreen");
+            }}
+            hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+            accessibilityRole="link"
+            accessibilityLabel="Sign up"
           >
-            <Text style={styles.linkBlue}>Sign Up</Text>
+            <Text style={styles.signUpLink}> Sign up</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -220,9 +396,68 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 24,
   },
+  methodSection: {
+    marginTop: 20,
+    marginBottom: 4,
+  },
+  methodRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  methodChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+  },
+  methodChipActive: {
+    borderColor: "#38BDF8",
+    backgroundColor: "rgba(56, 189, 248, 0.1)",
+  },
+  methodChipActiveOtp: {
+    borderColor: "#14B8A6",
+    backgroundColor: "rgba(20, 184, 166, 0.1)",
+  },
+  methodChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#64748B",
+  },
+  methodChipTextActive: {
+    color: "#0F172A",
+  },
+  methodHint: {
+    marginTop: 10,
+    fontSize: 12,
+    color: "#64748B",
+    lineHeight: 18,
+    fontWeight: "500",
+  },
   formWrapper: {
-    marginTop: 24, // << spacing after role selector
+    marginTop: 16,
     gap: 0,
+  },
+  sendOtpBtn: {
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  sendOtpText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0F172A",
   },
   roleSection: {
     marginTop: 32,
@@ -331,6 +566,9 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
+  signInButtonDisabled: {
+    opacity: 0.7,
+  },
   signInText: {
     fontSize: 16,
     fontWeight: "700",
@@ -341,10 +579,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
+    flexWrap: "wrap",
     marginTop: 16,
+    paddingHorizontal: 8,
   },
   signUpGray: {
     fontSize: 13,
     color: "#64748B",
+    textAlign: "center",
+  },
+  signUpLink: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#38BDF8",
   },
 });

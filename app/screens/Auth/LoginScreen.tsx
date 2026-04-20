@@ -1,45 +1,58 @@
 import React from "react";
-import { TouchableWithoutFeedback, Keyboard } from "react-native";
+import { TouchableWithoutFeedback, Keyboard, Alert } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 import LoginHeader from "./components/LoginHeader";
 import LoginForm from "./components/LoginForm";
-import { useAuth, UserRole } from "../../context/AuthContext";
+import { useAppDispatch, useAppSelector } from "../../../store/hooks";
+import {
+  clearError,
+  loginThunk,
+  sendOtpThunk,
+} from "../../../store/slices/authSlice";
+import type { UserRole } from "../../types/roles";
 
-/**
- * LoginScreen
- *
- * - Uses KeyboardAwareScrollView so inputs are always visible when keyboard opens.
- * - Wraps content in TouchableWithoutFeedback to dismiss keyboard on outside tap.
- *
- * NOTE: For Android, add the following to your AndroidManifest.xml activity tag:
- *   android:windowSoftInputMode="adjustResize"
- */
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuth();
+  const dispatch = useAppDispatch();
+  const { loading, error, otpSending } = useAppSelector((s) => s.auth);
 
-  const handleLogin = (role: UserRole) => {
-    // Authentication logic bypassed for UI testing
-    console.log(`Login submitted as ${role} - Navigating to Home`);
-    login(role);
-    router.replace("/home" as any);
+  React.useEffect(() => {
+    if (error) {
+      Alert.alert("Sign in", error);
+      dispatch(clearError());
+    }
+  }, [error, dispatch]);
+
+  const handleSendOtp = async (identifier: string) => {
+    await dispatch(sendOtpThunk(identifier));
+  };
+
+  const handleLogin = async (
+    identifier: string,
+    passwordOrOtp: string,
+    expectedRole: UserRole
+  ) => {
+    const result = await dispatch(
+      loginThunk({ identifier, passwordOrOtp, expectedRole })
+    );
+    if (loginThunk.fulfilled.match(result)) {
+      router.replace("/home" as any);
+    }
   };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#0F172A" }} edges={["top"]}>
       <StatusBar style="light" />
-      <Stack.Screen 
-        options={{ 
+      <Stack.Screen
+        options={{
           headerShown: false,
-          animation: "fade" // Smooth symmetric transition
-        }} 
+          animation: "fade",
+        }}
       />
 
-
-      {/* Dismiss keyboard when tapping outside inputs */}
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <KeyboardAwareScrollView
           style={{ flex: 1, backgroundColor: "#F8FAFC" }}
@@ -52,7 +65,12 @@ export default function LoginScreen() {
           extraHeight={120}
         >
           <LoginHeader />
-          <LoginForm onLogin={handleLogin} />
+          <LoginForm
+            onSendOtp={handleSendOtp}
+            onLogin={handleLogin}
+            loading={loading}
+            otpSending={otpSending}
+          />
         </KeyboardAwareScrollView>
       </TouchableWithoutFeedback>
     </SafeAreaView>

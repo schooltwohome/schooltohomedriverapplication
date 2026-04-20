@@ -89,6 +89,8 @@ module.exports = ({ config }) => {
       eas: {
         projectId: "a2993f5e-4947-4506-8408-145ec51e2f8a",
       },
+      // Used by client-side Directions API requests (restricted key recommended).
+      googleMapsApiKey: googleMapsKey,
     },
   };
 

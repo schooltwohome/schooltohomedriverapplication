@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Modal, View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Linking, Alert } from "react-native";
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
+import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Navigation, X } from "lucide-react-native";
 import type { TripCoords } from "../types";
@@ -27,6 +28,45 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
   const mapRef = useRef<MapView>(null);
   const [driver, setDriver] = useState<TripCoords | null>(null);
   const [waitingGps, setWaitingGps] = useState(true);
+  const [routeCoords, setRouteCoords] = useState<TripCoords[] | null>(null);
+
+  const googleKey =
+    (Constants.expoConfig?.extra as any)?.googleMapsApiKey ||
+    (Constants.manifest as any)?.extra?.googleMapsApiKey ||
+    "";
+
+  function decodePolyline(encoded: string): TripCoords[] {
+    // Google's polyline algorithm (no deps).
+    let index = 0;
+    let lat = 0;
+    let lng = 0;
+    const coordinates: TripCoords[] = [];
+    while (index < encoded.length) {
+      let result = 0;
+      let shift = 0;
+      let b: number;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlat = result & 1 ? ~(result >> 1) : result >> 1;
+      lat += dlat;
+
+      result = 0;
+      shift = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlng = result & 1 ? ~(result >> 1) : result >> 1;
+      lng += dlng;
+
+      coordinates.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+    }
+    return coordinates;
+  }
 
   const openTurnByTurn = async () => {
     const lat = stopCoordinate.latitude;
@@ -51,6 +91,7 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
     if (!visible) {
       setDriver(null);
       setWaitingGps(true);
+      setRouteCoords(null);
       return;
     }
 
@@ -99,9 +140,48 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
   }, [visible, stopCoordinate.latitude, stopCoordinate.longitude]);
 
   useEffect(() => {
+    if (!visible) return;
+    if (!driver) {
+      setRouteCoords(null);
+      return;
+    }
+    if (!googleKey) {
+      // No key configured; fallback to straight line polyline.
+      setRouteCoords(null);
+      return;
+    }
+
+    const origin = `${driver.latitude},${driver.longitude}`;
+    const dest = `${stopCoordinate.latitude},${stopCoordinate.longitude}`;
+    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(
+      origin
+    )}&destination=${encodeURIComponent(dest)}&mode=driving&key=${encodeURIComponent(googleKey)}`;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(url);
+        const json = await res.json();
+        const pts = json?.routes?.[0]?.overview_polyline?.points;
+        if (!cancelled && typeof pts === "string" && pts.length > 0) {
+          setRouteCoords(decodePolyline(pts));
+        } else if (!cancelled) {
+          setRouteCoords(null);
+        }
+      } catch {
+        if (!cancelled) setRouteCoords(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, driver, stopCoordinate.latitude, stopCoordinate.longitude, googleKey]);
+
+  useEffect(() => {
     if (!visible || !mapRef.current) return;
-    const pts: TripCoords[] = [stopCoordinate];
-    if (driver) pts.unshift(driver);
+    const pts: TripCoords[] = routeCoords?.length ? routeCoords : [stopCoordinate];
+    if (!routeCoords?.length && driver) pts.unshift(driver);
     const pad = {
       top: insets.top + 72,
       right: 28,
@@ -123,7 +203,7 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
       }
       mapRef.current?.fitToCoordinates(pts, { edgePadding: pad, animated: true });
     });
-  }, [visible, driver, stopCoordinate, insets.top, insets.bottom]);
+  }, [visible, driver, stopCoordinate, routeCoords, insets.top, insets.bottom]);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -135,6 +215,7 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
           initialRegion={initialRegion(stopCoordinate)}
           showsUserLocation={false}
           showsMyLocationButton={false}
+          loadingEnabled
         >
           <Marker coordinate={stopCoordinate} title={stopName} pinColor="#0F172A" />
           {driver ? (
@@ -145,7 +226,7 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
                 pinColor="#38BDF8"
               />
               <Polyline
-                coordinates={[driver, stopCoordinate]}
+                coordinates={routeCoords?.length ? routeCoords : [driver, stopCoordinate]}
                 strokeColor="#38BDF8"
                 strokeWidth={4}
               />

@@ -120,6 +120,10 @@ export type RouteRosterStudent = {
   grade: string | null;
   stop_name: string;
   status: "present" | "absent" | "pending";
+  boarded_at?: string | null;
+  dropped_at?: string | null;
+  assigned_to_trip?: boolean;
+  is_present?: boolean;
 };
 
 export function getRouteRoster(token: string, routeId: string, busId?: string) {
@@ -129,6 +133,39 @@ export function getRouteRoster(token: string, routeId: string, busId?: string) {
     {
       method: "GET",
       token,
+    }
+  );
+}
+
+/** POST /users/me/attendance/simulate-nfc-tap — backend marks one random absent student present. */
+export type SimulateNfcTapResponse = {
+  student: {
+    id: string;
+    uuid: string;
+    name: string;
+    rosterStatus: "present";
+    boarded_at: string;
+  };
+  attendance: {
+    id: string;
+    status: string;
+    boarded_time: string;
+  };
+};
+
+export function simulateNfcTap(
+  token: string,
+  payload: { routeId: number; busId: number }
+) {
+  return apiRequest<SimulateNfcTapResponse>(
+    "/api/v1/users/me/attendance/simulate-nfc-tap",
+    {
+      method: "POST",
+      token,
+      body: JSON.stringify({
+        routeId: payload.routeId,
+        busId: payload.busId,
+      }),
     }
   );
 }

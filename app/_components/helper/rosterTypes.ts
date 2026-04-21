@@ -6,4 +6,7 @@ export interface HelperStudentRow {
   grade: string;
   stopName: string;
   status: AttendanceStatus;
+  boardedAt?: string | null;
+  assignedToTrip?: boolean;
+  isPresent?: boolean;
 }

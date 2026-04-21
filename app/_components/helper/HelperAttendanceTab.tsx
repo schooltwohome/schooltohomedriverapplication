@@ -40,9 +40,11 @@ type Props = {
 
 export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: Props) {
   const token = useAppSelector((s) => s.auth.token);
-  const { assignment, rosterStudents, setStudentAttendance } = useHelperAssignment();
+  const { assignment, rosterStudents, setStudentAttendance, refetchRoster } = useHelperAssignment();
   const [nfcListening, setNfcListening] = useState(false);
   const [nfcUi, setNfcUi] = useState<NfcUiState>({ type: "idle" });
+  // Backend currently supports simulate endpoint; keep real mode as an optional switch for later.
+  const [devSimulateTap, setDevSimulateTap] = useState(true);
 
   const onNfcStatus = useCallback((msg: NfcUiState) => {
     setNfcUi(msg);
@@ -55,10 +57,14 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
   }, []);
 
   const onMarkedPresent = useCallback(
-    (studentUuid: string) => {
-      setStudentAttendance(studentUuid, "present");
+    async (payload: { studentUuid: string; boardedAt?: string | null }) => {
+      setStudentAttendance(payload.studentUuid, {
+        status: "present",
+        boardedAt: payload.boardedAt ?? null,
+      });
+      await refetchRoster();
     },
-    [setStudentAttendance]
+    [setStudentAttendance, refetchRoster]
   );
 
   const busIdNum = useMemo(() => {
@@ -67,10 +73,18 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
     return Number.isFinite(n) && n > 0 ? n : null;
   }, [assignment]);
 
+  const routeIdNum = useMemo(() => {
+    if (!assignment) return null;
+    const n = Number(assignment.route.id);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [assignment]);
+
   useHelperNfcAttendance({
     enabled: nfcListening && !!token && busIdNum != null,
     token,
+    routeIdNum,
     busIdNum,
+    mode: devSimulateTap ? "simulate" : "real",
     onMarkedPresent,
     onStatus: onNfcStatus,
   });
@@ -91,13 +105,18 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
 
   const onRowPress = useCallback(
     (id: string, status: AttendanceStatus) => {
-      setStudentAttendance(id, nextStatus(status));
+      setStudentAttendance(id, { status: nextStatus(status) });
     },
     [setStudentAttendance]
   );
 
   const toggleNfc = useCallback(() => {
     setNfcListening((v) => !v);
+    setNfcUi({ type: "idle" });
+  }, []);
+
+  const toggleDevSimulate = useCallback(() => {
+    setDevSimulateTap((v) => !v);
     setNfcUi({ type: "idle" });
   }, []);
 
@@ -130,13 +149,33 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
           <Text style={styles.tileBody}>
             {nfcListening
               ? "Hold student RFID cards to the phone — each tap marks present on the active trip."
-              : "Turn on, then tap each student RFID; the app sends the card ID to the server."}
+              : devSimulateTap
+                ? "Turn on, then tap any RFID card; the app simulates marking one absent student present."
+                : "Turn on, then tap each student RFID; the app sends the card ID to the server."}
           </Text>
         </View>
         {nfcListening && nfcUi.type === "processing" ? (
           <ActivityIndicator color={Theme.text} />
         ) : null}
       </TouchableOpacity>
+
+      {typeof __DEV__ !== "undefined" && __DEV__ ? (
+        <TouchableOpacity
+          style={[styles.tile, devSimulateTap && styles.tileActive]}
+          activeOpacity={0.9}
+          onPress={toggleDevSimulate}
+        >
+          <Radio size={24} color={Theme.text} />
+          <View style={styles.tileText}>
+            <Text style={[styles.tileTitle, styles.tileTitleDark]}>
+              {devSimulateTap ? "Dev: Simulate tap (ON)" : "Dev: Simulate tap (OFF)"}
+            </Text>
+            <Text style={styles.tileBodyDark}>
+              When ON, each RFID read triggers `/users/me/attendance/simulate-nfc-tap` instead of UID mapping.
+            </Text>
+          </View>
+        </TouchableOpacity>
+      ) : null}
 
       {nfcListening ? (
         <View style={styles.nfcBanner}>

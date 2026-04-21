@@ -8,5 +8,8 @@ export function mapRouteRosterToHelperRows(rows: RouteRosterStudent[]): HelperSt
     grade: r.grade?.trim() ? r.grade : "—",
     stopName: r.stop_name,
     status: r.status,
+    boardedAt: r.boarded_at ?? null,
+    assignedToTrip: r.assigned_to_trip ?? undefined,
+    isPresent: r.is_present ?? undefined,
   }));
 }

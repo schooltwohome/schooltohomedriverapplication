@@ -19,7 +19,11 @@ interface HelperAssignmentContextType {
   rosterStudents: HelperStudentRow[];
   rosterLoading: boolean;
   rosterError: string | null;
-  setStudentAttendance: (studentId: string, status: AttendanceStatus) => void;
+  refetchRoster: () => Promise<void>;
+  setStudentAttendance: (
+    studentId: string,
+    update: { status: AttendanceStatus; boardedAt?: string | null }
+  ) => void;
 }
 
 const HelperAssignmentContext = createContext<HelperAssignmentContextType | undefined>(undefined);
@@ -57,38 +61,35 @@ export function HelperAssignmentProvider({ children }: { children: ReactNode }) 
     setAssignmentState({ bus, route });
   }, [token, me?.assignment, me?.user?.role]);
 
-  useEffect(() => {
+  const fetchRoster = useCallback(async () => {
     if (!assignment || !token) {
       setRosterStudents([]);
       setRosterLoading(false);
       setRosterError(null);
       return;
     }
-    let cancelled = false;
     setRosterLoading(true);
     setRosterError(null);
+    try {
+      const { students } = await getRouteRoster(token, assignment.route.id, assignment.bus.id);
+      setRosterStudents(mapRouteRosterToHelperRows(students));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not load students";
+      setRosterError(msg);
+      setRosterStudents([]);
+    } finally {
+      setRosterLoading(false);
+    }
+  }, [assignment, token]);
+
+  useEffect(() => {
     (async () => {
-      try {
-        const { students } = await getRouteRoster(token, assignment.route.id, assignment.bus.id);
-        if (!cancelled) {
-          setRosterStudents(mapRouteRosterToHelperRows(students));
-        }
-      } catch (e) {
-        if (!cancelled) {
-          const msg = e instanceof Error ? e.message : "Could not load students";
-          setRosterError(msg);
-          setRosterStudents([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setRosterLoading(false);
-        }
-      }
+      await fetchRoster();
     })();
     return () => {
-      cancelled = true;
+      // no-op (fetchRoster manages its own state)
     };
-  }, [token, assignment]);
+  }, [fetchRoster]);
 
   const setAssignment = useCallback((bus: BusItem, route: RouteItem) => {
     setAssignmentState({ bus, route });
@@ -101,11 +102,22 @@ export function HelperAssignmentProvider({ children }: { children: ReactNode }) 
     setRosterError(null);
   }, []);
 
-  const setStudentAttendance = useCallback((studentId: string, status: AttendanceStatus) => {
-    setRosterStudents((prev) =>
-      prev.map((s) => (s.id === studentId ? { ...s, status } : s))
-    );
-  }, []);
+  const setStudentAttendance = useCallback(
+    (studentId: string, update: { status: AttendanceStatus; boardedAt?: string | null }) => {
+      setRosterStudents((prev) =>
+        prev.map((s) =>
+          s.id === studentId
+            ? {
+                ...s,
+                status: update.status,
+                ...(update.boardedAt !== undefined ? { boardedAt: update.boardedAt } : {}),
+              }
+            : s
+        )
+      );
+    },
+    []
+  );
 
   const value = useMemo(
     () => ({
@@ -116,6 +128,7 @@ export function HelperAssignmentProvider({ children }: { children: ReactNode }) 
       rosterStudents,
       rosterLoading,
       rosterError,
+      refetchRoster: fetchRoster,
       setStudentAttendance,
     }),
     [
@@ -125,6 +138,7 @@ export function HelperAssignmentProvider({ children }: { children: ReactNode }) 
       rosterStudents,
       rosterLoading,
       rosterError,
+      fetchRoster,
       setStudentAttendance,
     ]
   );

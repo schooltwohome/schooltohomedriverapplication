@@ -11,9 +11,18 @@ interface Props {
   isLast?: boolean;
 }
 
-function StatusBadge({ status }: { status: HelperStudentRow["status"] }) {
+function formatBoardedTime(iso?: string | null) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+function StatusBadge({ student }: { student: HelperStudentRow }) {
   const cfg =
-    status === "present"
+    student.status === "present"
       ? {
           Icon: Check,
           label: "Present",
@@ -21,7 +30,7 @@ function StatusBadge({ status }: { status: HelperStudentRow["status"] }) {
           border: "#86EFAC",
           fg: Theme.success,
         }
-      : status === "absent"
+      : student.status === "absent"
         ? {
             Icon: X,
             label: "Absent",
@@ -38,15 +47,30 @@ function StatusBadge({ status }: { status: HelperStudentRow["status"] }) {
           };
 
   const Icon = cfg.Icon;
+  const boardedTime = student.status === "present" ? formatBoardedTime(student.boardedAt) : null;
   return (
     <View style={[styles.badge, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
       <Icon size={14} color={cfg.fg} strokeWidth={2.5} />
-      <Text style={[styles.badgeText, { color: cfg.fg }]}>{cfg.label}</Text>
+      <Text style={[styles.badgeText, { color: cfg.fg }]}>
+        {cfg.label}
+        {boardedTime ? ` · ${boardedTime}` : ""}
+      </Text>
     </View>
   );
 }
 
 export default function HelperStudentRosterRow({ student, compact, isLast }: Props) {
+  const statusHint =
+    student.status === "present"
+      ? "Boarded"
+      : student.status === "absent"
+        ? student.assignedToTrip === false
+          ? "Not assigned to trip"
+          : "Not boarded yet"
+        : student.assignedToTrip === false
+          ? "Not assigned to trip"
+          : "Pending";
+
   return (
     <View style={[styles.row, compact && styles.rowCompact, isLast && styles.rowLast]}>
       <View style={styles.avatar}>
@@ -59,10 +83,10 @@ export default function HelperStudentRosterRow({ student, compact, isLast }: Pro
           {student.name}
         </Text>
         <Text style={styles.meta} numberOfLines={1}>
-          {student.grade} · {student.stopName}
+          {student.grade} · {student.stopName} · {statusHint}
         </Text>
       </View>
-      <StatusBadge status={student.status} />
+      <StatusBadge student={student} />
     </View>
   );
 }

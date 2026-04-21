@@ -3,7 +3,7 @@ module.exports = ({ config }) => {
     process.env.GOOGLE_MAPS_API_KEY?.trim() ||
     process.env.GOOGLE_MAPS_ANDROID_API_KEY?.trim() ||
     process.env.GOOGLE_MAPS_IOS_API_KEY?.trim() ||
-    "";
+    "AIzaSyAnjJcugrzeD5rNrj5WFwLAV6wUTrF_Ag4";
 
   const baseExpo = {
     ...(config || {}),

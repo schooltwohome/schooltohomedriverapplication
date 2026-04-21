@@ -14,6 +14,27 @@ type Params = {
   onStatus: (msg: { type: "idle" | "listening" | "processing" | "success" | "error"; text?: string }) => void;
 };
 
+function normalizeBoardedAt(isoOrTime?: string | null) {
+  if (!isoOrTime) return null;
+  const raw = String(isoOrTime).trim();
+  if (!raw) return null;
+
+  const d = new Date(raw);
+  if (!Number.isNaN(d.getTime())) return d.toISOString();
+
+  // Some backends return `HH:mm:ss` or `HH:mm`. Convert to today-local ISO.
+  const m = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!m) return new Date().toISOString();
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  const ss = m[3] ? Number(m[3]) : 0;
+  if (![hh, mm, ss].every((n) => Number.isFinite(n))) return new Date().toISOString();
+
+  const now = new Date();
+  now.setHours(hh, mm, ss, 0);
+  return now.toISOString();
+}
+
 export function useHelperNfcAttendance({
   enabled,
   token,
@@ -108,14 +129,18 @@ export function useHelperNfcAttendance({
             const result =
               m === "simulate"
                 ? await simulateNfcTap(t, { routeId: Number(route), busId: Number(bus) })
-                : await postBusAttendanceNfcTap(t, { busId: bus, nfcUid: String(uid) });
+                : await postBusAttendanceNfcTap(t, {
+                    busId: bus,
+                    routeId: Number(route ?? 0),
+                    uid: String(uid ?? ""),
+                  });
             if (cancelled) return;
             const studentUuid =
               m === "simulate" ? result.student.id : result.student.uuid;
             const boardedAt =
-              m === "simulate" ? result.student.boarded_at : result.attendance.boarded_time;
+              m === "simulate" ? result.student.boarded_at : result.attendance.boarded_at;
 
-            await mark({ studentUuid, boardedAt });
+            await mark({ studentUuid, boardedAt: normalizeBoardedAt(boardedAt) });
             status({
               type: "success",
               text:

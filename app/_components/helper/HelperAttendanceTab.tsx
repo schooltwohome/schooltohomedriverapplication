@@ -105,9 +105,14 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
 
   const onRowPress = useCallback(
     (id: string, status: AttendanceStatus) => {
-      setStudentAttendance(id, { status: nextStatus(status) });
+      const newStatus = nextStatus(status);
+      setStudentAttendance(id, {
+        status: newStatus,
+        boardedAt: newStatus === "present" ? new Date().toISOString() : null,
+      });
+      void refetchRoster();
     },
-    [setStudentAttendance]
+    [setStudentAttendance, refetchRoster]
   );
 
   const toggleNfc = useCallback(() => {

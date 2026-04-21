@@ -149,7 +149,7 @@ export type SimulateNfcTapResponse = {
   attendance: {
     id: string;
     status: string;
-    boarded_time: string;
+    boarded_at: string;
   };
 };
 
@@ -235,21 +235,30 @@ export type NfcTapAttendanceResult = {
   trip: { id: string; status: string };
   attendance: {
     status: "boarded";
-    boarded_time: string;
+    boarded_at: string;
     already_boarded: boolean;
   };
 };
 
 export function postBusAttendanceNfcTap(
   token: string,
-  payload: { busId: number; nfcUid: string }
+  payload: {
+    busId: number;
+    routeId: number;
+    studentUuid?: string;
+    uid?: string;
+    studentCode?: string;
+  }
 ) {
   return apiRequest<NfcTapAttendanceResult>("/api/v1/bus/attendance/nfc-tap", {
     method: "POST",
     token,
     body: JSON.stringify({
       busId: payload.busId,
-      nfcUid: payload.nfcUid.trim(),
+      routeId: payload.routeId,
+      ...(payload.studentUuid ? { studentUuid: payload.studentUuid } : {}),
+      ...(payload.uid ? { uid: payload.uid.trim() } : {}),
+      ...(payload.studentCode ? { studentCode: payload.studentCode.trim() } : {}),
     }),
   });
 }

@@ -45,7 +45,7 @@ export default function LoginHeader() {
         </View>
       </View>
 
-      <Text className="text-2xl font-bold text-white text-center">SchoolBus Tracker</Text>
+      <Text className="text-2xl font-bold text-white text-center">School2Home</Text>
       <Text className="text-[#94A3B8] text-sm text-center mt-1">Safe journeys, happy parents</Text>
 
       {/* Feature badges */}

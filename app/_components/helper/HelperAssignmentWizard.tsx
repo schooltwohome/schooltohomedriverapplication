@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, TouchableOpacity, Text } from "react-native";
+import { View, StyleSheet, TouchableOpacity, Text, Alert } from "react-native";
 import { ArrowLeft } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -8,6 +8,8 @@ import SelectBusStep from "../driver-trip/SelectBusStep";
 import SelectRouteStep from "../driver-trip/SelectRouteStep";
 import { BusItem, RouteItem } from "../driver-trip/types";
 import { useTripSetupLists } from "../../hooks/useTripSetupLists";
+import { useAppSelector } from "../../../store/hooks";
+import { postHelperTripJoin } from "../../../services/driverHelperApi";
 
 const TOTAL_STEPS = 2;
 
@@ -17,19 +19,46 @@ interface Props {
 
 export default function HelperAssignmentWizard({ onComplete }: Props) {
   const insets = useSafeAreaInsets();
+  const token = useAppSelector((s) => s.auth.token);
   const { buses, routes, loading: listsLoading, error: listsError, reload: reloadLists } =
     useTripSetupLists();
   const [step, setStep] = useState<1 | 2>(1);
   const [selectedBus, setSelectedBus] = useState<BusItem | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleBusNext = (bus: BusItem) => {
     setSelectedBus(bus);
     setStep(2);
   };
 
-  const handleRouteNext = (route: RouteItem) => {
+  const handleRouteNext = async (route: RouteItem) => {
     if (!selectedBus) return;
-    onComplete(selectedBus, route);
+    const busId = selectedBus?.id != null ? Number(selectedBus.id) : NaN;
+    const routeId = route?.id != null ? Number(route.id) : NaN;
+    if (!token || !Number.isFinite(busId) || !Number.isFinite(routeId)) {
+      Alert.alert(
+        "Could not save assignment",
+        "Please sign in again and try selecting the bus and route."
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await postHelperTripJoin(token, { busId, routeId });
+      onComplete(selectedBus, route);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not join this bus";
+      Alert.alert(
+        "Bus already selected",
+        `${msg}\n\nAnother helper may have already selected this bus. Please choose a different bus.`
+      );
+      await reloadLists();
+      setSelectedBus(null);
+      setStep(1);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const stepHint = step === 1 ? "Bus first, then route" : "Almost done";
@@ -110,7 +139,7 @@ export default function HelperAssignmentWizard({ onComplete }: Props) {
             hideStepLabel
             selectedBus={selectedBus}
             routes={routes}
-            loading={listsLoading}
+            loading={listsLoading || submitting}
             error={listsError}
             onRetry={reloadLists}
             onNext={handleRouteNext}

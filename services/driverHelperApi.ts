@@ -96,6 +96,11 @@ export type TripStartResponse = {
   trip: Record<string, unknown>;
 };
 
+/** POST /users/me/helper-trip-join — helper claims the active trip for bus+route. */
+export type HelperTripJoinResponse = {
+  trip: Record<string, unknown>;
+};
+
 export function postDriverTripStart(
   token: string,
   payload: {
@@ -116,6 +121,23 @@ export function postDriverTripStart(
     method: "POST",
     token,
     body: JSON.stringify(body),
+  });
+}
+
+export function postHelperTripJoin(
+  token: string,
+  payload: {
+    busId: number;
+    routeId: number;
+  }
+) {
+  return apiRequest<HelperTripJoinResponse>("/api/v1/users/me/helper-trip-join", {
+    method: "POST",
+    token,
+    body: JSON.stringify({
+      busId: payload.busId,
+      routeId: payload.routeId,
+    }),
   });
 }
 

@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, StyleSheet } from "react-native";
+import { Alert, View, StyleSheet } from "react-native";
 import TripSetupWizard from "../driver-trip/TripSetupWizard";
 import LiveTripDashboard from "../driver-trip/LiveTripDashboard";
 import { captureTripStartSnapshot } from "../driver-trip/tripStartLocation";
 import { TripData } from "../driver-trip/types";
 import { useAppSelector } from "../../../store/hooks";
 import { assignmentToBusRoute } from "../../../lib/mapAssignment";
+import { postDriverTripStart } from "../../../services/driverHelperApi";
 
 interface DriverDashboardProps {
   onLiveTripChange?: (live: boolean) => void;
@@ -13,6 +14,7 @@ interface DriverDashboardProps {
 
 export default function DriverDashboard({ onLiveTripChange }: DriverDashboardProps) {
   const me = useAppSelector((s) => s.auth.me);
+  const token = useAppSelector((s) => s.auth.token);
   const prefill = useMemo<Partial<TripData> | null>(() => {
     if (!me?.assignment?.route) return null;
     const { bus, route } = assignmentToBusRoute(me.assignment);
@@ -27,7 +29,35 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
   }, [isLive, onLiveTripChange]);
 
   const handleStartTrip = async (data: TripData) => {
-    const tripStart = await captureTripStartSnapshot();
+    const busId = data.bus?.id != null ? Number(data.bus.id) : NaN;
+    const routeId = data.route?.id != null ? Number(data.route.id) : NaN;
+
+    const tripStartPromise = captureTripStartSnapshot();
+
+    if (token && Number.isFinite(busId) && Number.isFinite(routeId)) {
+      try {
+        await postDriverTripStart(token, { busId, routeId });
+      } catch (e) {
+        const msg =
+          e instanceof Error ? e.message : "Could not register trip start on the server";
+        Alert.alert(
+          "Could not notify parents",
+          `${msg}\n\nYour trip will still open. Check your connection or try ending the trip and starting again.`
+        );
+      }
+    } else if (!token) {
+      Alert.alert(
+        "Trip start",
+        "You are not signed in. Parents will not receive a start notification."
+      );
+    } else {
+      Alert.alert(
+        "Trip start",
+        "Bus or route is missing. Parents will not receive a start notification."
+      );
+    }
+
+    const tripStart = await tripStartPromise;
     setActiveTripData({ ...data, tripStart });
     setIsLive(true);
   };

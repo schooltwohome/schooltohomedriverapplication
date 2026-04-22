@@ -82,10 +82,19 @@ module.exports = ({ config }) => {
         },
       ],
       "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          icon: "./assets/images/icon.png",
+          color: "#0F172A",
+          sounds: [],
+        },
+      ],
     ],
 
     extra: {
       apiUrl: "https://apidev.school2home.in",
+      // apiUrl: "http://192.168.72.162:8080",
       eas: {
         projectId: "a2993f5e-4947-4506-8408-145ec51e2f8a",
       },

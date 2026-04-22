@@ -1,10 +1,11 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View, StyleSheet } from "react-native";
 
 import { Theme } from "../../_theme/theme";
 import { ClipboardCheck, Home, User } from "lucide-react-native";
 
-import { useAppSelector } from "../../../store/hooks";
+import { useAppDispatch, useAppSelector } from "../../../store/hooks";
+import { consumePendingPushIntent } from "../../../store/slices/pushSlice";
 import { normalizeRole } from "../../types/roles";
 import { useHelperAssignment } from "../../_context/HelperAssignmentContext";
 import DriverDashboard from "./DriverDashboard";
@@ -24,10 +25,14 @@ const HELPER_TABS: BottomTabDefinition[] = [
 ];
 
 export default function HomeDashboard() {
+  const dispatch = useAppDispatch();
   const me = useAppSelector((s) => s.auth.me);
+  const pendingPushIntent = useAppSelector((s) => s.push.pendingPushIntent);
   const role = normalizeRole(me?.user?.role) ?? "driver";
   const { assignment, setAssignment, clearAssignment, hasAssignment } = useHelperAssignment();
   const [activeTab, setActiveTab] = useState("home");
+  const [openNotificationsFromPush, setOpenNotificationsFromPush] =
+    useState(false);
   const [driverLiveTrip, setDriverLiveTrip] = useState(false);
   const [attendanceBootstrap, setAttendanceBootstrap] = useState<HelperAttendanceBootstrap | null>(
     null
@@ -36,6 +41,16 @@ export default function HomeDashboard() {
   const handleDriverLiveChange = useCallback((live: boolean) => {
     setDriverLiveTrip(live);
   }, []);
+
+  useEffect(() => {
+    if (!pendingPushIntent) return;
+    if (pendingPushIntent.kind === "tab") {
+      setActiveTab(pendingPushIntent.tab);
+    } else if (pendingPushIntent.kind === "notifications") {
+      setOpenNotificationsFromPush(true);
+    }
+    dispatch(consumePendingPushIntent());
+  }, [pendingPushIntent, dispatch]);
 
   const goToAttendance = useCallback((autoStartRfid: boolean) => {
     setAttendanceBootstrap({ autoStartRfid, id: Date.now() });
@@ -70,6 +85,10 @@ export default function HomeDashboard() {
           greeting="Welcome back"
           userName={headerSubtitle}
           role={role}
+          openNotificationsFromPush={openNotificationsFromPush}
+          onNotificationsFromPushConsumed={() =>
+            setOpenNotificationsFromPush(false)
+          }
         />
       )}
 

@@ -91,6 +91,34 @@ export function getTripSetup(token: string) {
   });
 }
 
+/** POST /users/me/trip-start — registers trip on server and notifies parents (driver role only). */
+export type TripStartResponse = {
+  trip: Record<string, unknown>;
+};
+
+export function postDriverTripStart(
+  token: string,
+  payload: {
+    busId: number;
+    routeId: number;
+    /** ISO datetime string — forwarded as `scheduledStart` on the server. */
+    scheduledStart?: string;
+  }
+) {
+  const body: Record<string, unknown> = {
+    busId: payload.busId,
+    routeId: payload.routeId,
+  };
+  if (payload.scheduledStart?.trim()) {
+    body.scheduledStart = payload.scheduledStart.trim();
+  }
+  return apiRequest<TripStartResponse>("/api/v1/users/me/trip-start", {
+    method: "POST",
+    token,
+    body: JSON.stringify(body),
+  });
+}
+
 /** GET /users/me/route-stops/:routeId — ordered stops with coordinates and per-stop student counts. */
 export type RouteStopsLiveResponse = {
   stops: Array<{
@@ -206,6 +234,18 @@ export function markMyNotificationRead(token: string, notificationId: string) {
       token,
     }
   );
+}
+
+/** POST /users/me/device — register Expo push token (driver, helper, staff; not the parent-specific route). */
+export function registerMyPushDevice(
+  token: string,
+  body: { expoPushToken: string; deviceType?: string; appVersion?: string }
+) {
+  return apiRequest<{ success: boolean }>("/api/v1/users/me/device", {
+    method: "POST",
+    token,
+    body: JSON.stringify(body),
+  });
 }
 
 export function postBusLocation(

@@ -6,6 +6,17 @@ export type ApiSuccess<T> = {
   data?: T;
 };
 
+/** Thrown by `apiRequest` with HTTP status (e.g. branch on 401). */
+export class ApiHttpError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiHttpError";
+    this.status = status;
+  }
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestInit & { token?: string | null } = {}
@@ -42,7 +53,12 @@ export async function apiRequest<T>(
   };
 
   if (!res.ok || json.success === false) {
-    throw new Error(json.message || `Request failed (${res.status})`);
+    throw new ApiHttpError(
+      typeof json.message === "string" && json.message.length > 0
+        ? json.message
+        : `Request failed (${res.status})`,
+      res.status
+    );
   }
 
   return json.data as T;

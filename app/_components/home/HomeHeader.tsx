@@ -13,12 +13,22 @@ interface HomeHeaderProps {
   greeting: string;
   userName: string;
   role?: UserRole;
+  /** When set, opens the notifications sheet (e.g. from a push tap). */
+  openNotificationsFromPush?: boolean;
+  onNotificationsFromPushConsumed?: () => void;
 }
 
-export default function HomeHeader({ greeting, userName, role }: HomeHeaderProps) {
+export default function HomeHeader({
+  greeting,
+  userName,
+  role,
+  openNotificationsFromPush = false,
+  onNotificationsFromPushConsumed,
+}: HomeHeaderProps) {
   const dispatch = useAppDispatch();
   const router = useRouter();
   const token = useAppSelector((s) => s.auth.token);
+  const inboxRefreshNonce = useAppSelector((s) => s.push.inboxRefreshNonce);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
   const { items, loading, unreadCount, refresh, markAllRead } =
@@ -33,6 +43,17 @@ export default function HomeHeader({ greeting, userName, role }: HomeHeaderProps
       void refresh();
     }
   }, [isModalVisible, refresh]);
+
+  useEffect(() => {
+    if (inboxRefreshNonce === 0) return;
+    void refresh();
+  }, [inboxRefreshNonce, refresh]);
+
+  useEffect(() => {
+    if (!openNotificationsFromPush) return;
+    setIsModalVisible(true);
+    onNotificationsFromPushConsumed?.();
+  }, [openNotificationsFromPush, onNotificationsFromPushConsumed]);
 
   const handleSignOut = () => {
     Alert.alert(

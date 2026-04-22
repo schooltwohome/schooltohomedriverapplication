@@ -6,7 +6,7 @@ import { captureTripStartSnapshot } from "../driver-trip/tripStartLocation";
 import { TripData } from "../driver-trip/types";
 import { useAppSelector } from "../../../store/hooks";
 import { assignmentToBusRoute } from "../../../lib/mapAssignment";
-import { postDriverTripStart } from "../../../services/driverHelperApi";
+import { getMyActiveTrip, postDriverTripStart } from "../../../services/driverHelperApi";
 
 interface DriverDashboardProps {
   onLiveTripChange?: (live: boolean) => void;
@@ -23,6 +23,47 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
 
   const [isLive, setIsLive] = useState(false);
   const [activeTripData, setActiveTripData] = useState<TripData | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!token) return;
+      try {
+        const active = await getMyActiveTrip(token);
+        if (cancelled) return;
+        if (active?.trip && active.bus && active.route) {
+          const tripStart = await captureTripStartSnapshot();
+          if (cancelled) return;
+          setActiveTripData({
+            bus: {
+              id: active.bus.id,
+              name: `Bus ${active.bus.bus_number}`,
+              licensePlate: active.bus.number_plate?.trim()
+                ? active.bus.number_plate
+                : "—",
+              seats: 0,
+              status: "In Use",
+            },
+            route: {
+              id: active.route.id,
+              name: active.route.route_name,
+              stopsCount: 0,
+              duration: "—",
+              studentsCount: 0,
+            },
+            schedule: null,
+            tripStart,
+          });
+          setIsLive(true);
+        }
+      } catch {
+        // no-op: fall back to wizard (network errors etc.)
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   useEffect(() => {
     onLiveTripChange?.(isLive);

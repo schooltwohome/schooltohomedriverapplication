@@ -91,6 +91,27 @@ export function getTripSetup(token: string) {
   });
 }
 
+/** GET /users/me/active-trip — driver’s latest active trip (if any). */
+export type MyActiveTripResponse = {
+  trip: {
+    id: string;
+    status: string;
+    trip_date: string | null;
+    scheduled_start: string | null;
+    actual_start: string | null;
+    actual_end: string | null;
+  } | null;
+  bus: { id: string; bus_number: string; number_plate: string | null } | null;
+  route: { id: string; route_name: string } | null;
+};
+
+export function getMyActiveTrip(token: string) {
+  return apiRequest<MyActiveTripResponse>("/api/v1/users/me/active-trip", {
+    method: "GET",
+    token,
+  });
+}
+
 /** POST /users/me/trip-start — registers trip on server and notifies parents (driver role only). */
 export type TripStartResponse = {
   trip: Record<string, unknown>;

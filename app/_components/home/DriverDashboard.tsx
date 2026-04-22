@@ -6,7 +6,12 @@ import { captureTripStartSnapshot } from "../driver-trip/tripStartLocation";
 import { TripData } from "../driver-trip/types";
 import { useAppSelector } from "../../../store/hooks";
 import { assignmentToBusRoute } from "../../../lib/mapAssignment";
-import { getMyActiveTrip, postDriverTripStart } from "../../../services/driverHelperApi";
+import {
+  getMyActiveTrip,
+  postDriverTripCancel,
+  postDriverTripComplete,
+  postDriverTripStart,
+} from "../../../services/driverHelperApi";
 
 interface DriverDashboardProps {
   onLiveTripChange?: (live: boolean) => void;
@@ -104,8 +109,43 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
   };
 
   const handleEndTrip = () => {
-    setIsLive(false);
-    setActiveTripData(null);
+    const busId = activeTripData?.bus?.id != null ? Number(activeTripData.bus.id) : undefined;
+    const routeId = activeTripData?.route?.id != null ? Number(activeTripData.route.id) : undefined;
+
+    Alert.alert("End trip", "How do you want to end this trip?", [
+      { text: "Keep driving", style: "cancel" },
+      {
+        text: "Cancel trip",
+        style: "destructive",
+        onPress: async () => {
+          if (token) {
+            try {
+              await postDriverTripCancel(token, { busId, routeId });
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : "Could not cancel the trip on the server";
+              Alert.alert("Cancel trip", msg);
+            }
+          }
+          setIsLive(false);
+          setActiveTripData(null);
+        },
+      },
+      {
+        text: "Complete trip",
+        onPress: async () => {
+          if (token) {
+            try {
+              await postDriverTripComplete(token, { busId, routeId });
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : "Could not complete the trip on the server";
+              Alert.alert("Complete trip", msg);
+            }
+          }
+          setIsLive(false);
+          setActiveTripData(null);
+        },
+      },
+    ]);
   };
 
   return (

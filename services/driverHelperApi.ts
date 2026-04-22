@@ -112,6 +112,28 @@ export function getMyActiveTrip(token: string) {
   });
 }
 
+export function postDriverTripComplete(token: string, payload?: { busId?: number; routeId?: number }) {
+  return apiRequest<{ trip: Record<string, unknown> }>("/api/v1/users/me/trip-complete", {
+    method: "POST",
+    token,
+    body: JSON.stringify({
+      ...(payload?.busId != null ? { busId: payload.busId } : {}),
+      ...(payload?.routeId != null ? { routeId: payload.routeId } : {}),
+    }),
+  });
+}
+
+export function postDriverTripCancel(token: string, payload?: { busId?: number; routeId?: number }) {
+  return apiRequest<{ trip: Record<string, unknown> }>("/api/v1/users/me/trip-cancel", {
+    method: "POST",
+    token,
+    body: JSON.stringify({
+      ...(payload?.busId != null ? { busId: payload.busId } : {}),
+      ...(payload?.routeId != null ? { routeId: payload.routeId } : {}),
+    }),
+  });
+}
+
 /** POST /users/me/trip-start — registers trip on server and notifies parents (driver role only). */
 export type TripStartResponse = {
   trip: Record<string, unknown>;

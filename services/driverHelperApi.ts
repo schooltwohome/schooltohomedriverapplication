@@ -56,6 +56,7 @@ export type TripSetupResponse = {
     route_name: string;
     stops_count: number;
     students_count: number;
+    locked_by_other_driver_trip?: boolean;
   }>;
 };
 
@@ -337,11 +338,10 @@ export type NfcTapAttendanceResult = {
     student_code: string | null;
     grade: string | null;
   };
-  trip: { id: string; status: string };
   attendance: {
-    status: "boarded";
-    boarded_at: string;
-    already_boarded: boolean;
+    /** `boarded` maps to roster `present`; `absent` maps to roster `absent`. */
+    status: "boarded" | "absent";
+    boarded_at: string | null;
   };
 };
 

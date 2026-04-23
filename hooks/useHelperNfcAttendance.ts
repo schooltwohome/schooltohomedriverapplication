@@ -10,7 +10,16 @@ type Params = {
   routeIdNum: number | null;
   busIdNum: number | null;
   mode?: "real" | "simulate";
-  onMarkedPresent: (payload: { studentUuid: string; boardedAt?: string | null }) => void | Promise<void>;
+  /**
+   * When `mode="simulate"`, you can supply a concrete student UUID to toggle
+   * (useful when you only have 1 student and don’t want any stop-based behavior).
+   */
+  simulateStudentUuid?: string | null;
+  onAttendanceChanged: (payload: {
+    studentUuid: string;
+    status: "present" | "absent";
+    boardedAt?: string | null;
+  }) => void | Promise<void>;
   onStatus: (msg: { type: "idle" | "listening" | "processing" | "success" | "error"; text?: string }) => void;
 };
 
@@ -41,11 +50,28 @@ export function useHelperNfcAttendance({
   routeIdNum,
   busIdNum,
   mode = "simulate",
-  onMarkedPresent,
+  simulateStudentUuid = null,
+  onAttendanceChanged,
   onStatus,
 }: Params) {
-  const paramsRef = useRef({ token, routeIdNum, busIdNum, mode, onMarkedPresent, onStatus });
-  paramsRef.current = { token, routeIdNum, busIdNum, mode, onMarkedPresent, onStatus };
+  const paramsRef = useRef({
+    token,
+    routeIdNum,
+    busIdNum,
+    mode,
+    simulateStudentUuid,
+    onAttendanceChanged,
+    onStatus,
+  });
+  paramsRef.current = {
+    token,
+    routeIdNum,
+    busIdNum,
+    mode,
+    simulateStudentUuid,
+    onAttendanceChanged,
+    onStatus,
+  };
   const processingRef = useRef(false);
 
   useEffect(() => {
@@ -93,7 +119,7 @@ export function useHelperNfcAttendance({
 
         paramsRef.current.onStatus({
           type: "listening",
-          text: "Hold the phone near a student RFID card to mark present.",
+          text: "Hold the phone near a student RFID card to toggle Present / Absent.",
         });
 
         NfcManager.setEventListener(NfcEvents.DiscoverTag, async (tag: { id?: string | number[] }) => {
@@ -102,7 +128,8 @@ export function useHelperNfcAttendance({
             routeIdNum: route,
             busIdNum: bus,
             mode: m,
-            onMarkedPresent: mark,
+            simulateStudentUuid: simStudentUuid,
+            onAttendanceChanged: mark,
             onStatus: status,
           } = paramsRef.current;
 
@@ -126,28 +153,54 @@ export function useHelperNfcAttendance({
           status({ type: "processing", text: "Recording attendance…" });
 
           try {
-            const result =
-              m === "simulate"
-                ? await simulateNfcTap(t, { routeId: Number(route), busId: Number(bus) })
-                : await postBusAttendanceNfcTap(t, {
+            const result = await (async () => {
+              if (m === "simulate") {
+                if (simStudentUuid?.trim()) {
+                  return postBusAttendanceNfcTap(t, {
                     busId: bus,
                     routeId: Number(route ?? 0),
-                    uid: String(uid ?? ""),
+                    studentUuid: simStudentUuid.trim(),
                   });
-            if (cancelled) return;
-            const studentUuid =
-              m === "simulate" ? result.student.id : result.student.uuid;
-            const boardedAt =
-              m === "simulate" ? result.student.boarded_at : result.attendance.boarded_at;
+                }
+                return simulateNfcTap(t, { routeId: Number(route), busId: Number(bus) });
+              }
 
-            await mark({ studentUuid, boardedAt: normalizeBoardedAt(boardedAt) });
+              return postBusAttendanceNfcTap(t, {
+                busId: bus,
+                routeId: Number(route ?? 0),
+                uid: String(uid ?? ""),
+              });
+            })();
+            if (cancelled) return;
+            // Prefer UUID consistently so the roster row updates correctly.
+            const studentUuid =
+              (result as any)?.student?.uuid ??
+              (result as any)?.student?.id ??
+              result.student.uuid;
+            const boardedAt =
+              (result as any)?.attendance?.boarded_at ??
+              (result as any)?.student?.boarded_at ??
+              null;
+
+            const newStatus =
+              (result as any)?.attendance?.status === "absent"
+                ? "absent"
+                : "present";
+
+            await mark({
+              studentUuid,
+              status: newStatus,
+              boardedAt: newStatus === "present" ? normalizeBoardedAt(boardedAt) : null,
+            });
             status({
               type: "success",
               text:
                 m === "simulate"
-                  ? `${result.student.name} marked present.`
-                  : result.attendance.already_boarded
-                    ? `${result.student.name} was already marked present.`
+                  ? newStatus === "absent"
+                    ? `${result.student.name} marked absent.`
+                    : `${result.student.name} marked present.`
+                  : newStatus === "absent"
+                    ? `${result.student.name} marked absent.`
                     : `${result.student.name} marked present.`,
             });
           } catch (e) {

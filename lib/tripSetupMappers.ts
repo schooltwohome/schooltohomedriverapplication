@@ -31,5 +31,6 @@ export function apiRouteToRouteItem(
     stopsCount: r.stops_count,
     duration: "—",
     studentsCount: r.students_count,
+    lockedByOtherDriverTrip: Boolean(r.locked_by_other_driver_trip),
   };
 }

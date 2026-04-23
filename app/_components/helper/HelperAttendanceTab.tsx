@@ -57,10 +57,10 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
   }, []);
 
   const onMarkedPresent = useCallback(
-    async (payload: { studentUuid: string; boardedAt?: string | null }) => {
+    async (payload: { studentUuid: string; status: AttendanceStatus; boardedAt?: string | null }) => {
       setStudentAttendance(payload.studentUuid, {
-        status: "present",
-        boardedAt: payload.boardedAt ?? null,
+        status: payload.status,
+        boardedAt: payload.status === "present" ? (payload.boardedAt ?? null) : null,
       });
       await refetchRoster();
     },
@@ -85,7 +85,8 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
     routeIdNum,
     busIdNum,
     mode: devSimulateTap ? "simulate" : "real",
-    onMarkedPresent,
+    simulateStudentUuid: rosterStudents[0]?.id ?? null,
+    onAttendanceChanged: onMarkedPresent,
     onStatus: onNfcStatus,
   });
 

@@ -81,19 +81,29 @@ export default function SelectRouteStep({
           <Text style={styles.emptyText}>No routes are set up for your school yet.</Text>
         ) : null}
 
-        {!loading && routes.map((route) => (
+        {!loading && routes.map((route) => {
+          const routeLocked = Boolean(route.lockedByOtherDriverTrip);
+          return (
           <TouchableOpacity 
             key={route.id}
-            style={styles.routeCard}
+            style={[styles.routeCard, routeLocked && styles.routeCardDisabled]}
             activeOpacity={0.7}
+            disabled={routeLocked}
             onPress={() => onNext(route)}
           >
             <View style={styles.routeHeader}>
               <View style={styles.routeIconContainer}>
-                <Map size={24} color={Theme.yellowDark} />
+                <Map size={24} color={routeLocked ? Theme.textMuted : Theme.yellowDark} />
               </View>
               <View style={styles.routeHeaderDetails}>
-                <Text style={styles.routeName}>{route.name}</Text>
+                <Text style={[styles.routeName, routeLocked && styles.routeNameMuted]}>
+                  {route.name}
+                </Text>
+                {routeLocked ? (
+                  <Text style={styles.routeLockedHint}>
+                    In use by another driver — available when that trip ends or is cancelled
+                  </Text>
+                ) : null}
                 <View style={styles.routeStats}>
                   <View style={styles.statChip}>
                     <Map size={12} color={Theme.textMuted} />
@@ -112,11 +122,14 @@ export default function SelectRouteStep({
             </View>
 
             <View style={styles.viewStopsRow}>
-              <Text style={styles.viewStopsText}>View Stops</Text>
-              <ChevronRight size={16} color={Theme.yellowDark} />
+              <Text style={[styles.viewStopsText, routeLocked && styles.viewStopsTextMuted]}>
+                {routeLocked ? "Unavailable" : "View Stops"}
+              </Text>
+              <ChevronRight size={16} color={routeLocked ? Theme.textMuted : Theme.yellowDark} />
             </View>
           </TouchableOpacity>
-        ))}
+          );
+        })}
       </ScrollView>
     </View>
   );
@@ -241,6 +254,10 @@ const styles = StyleSheet.create({
     elevation: 2,
     overflow: 'hidden',
   },
+  routeCardDisabled: {
+    opacity: 0.72,
+    backgroundColor: Theme.bgMuted,
+  },
   routeHeader: {
     flexDirection: 'row',
     padding: 16,
@@ -264,6 +281,16 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '800',
     color: Theme.text,
+    marginBottom: 8,
+  },
+  routeNameMuted: {
+    color: Theme.textMuted,
+  },
+  routeLockedHint: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Theme.textMuted,
+    lineHeight: 16,
     marginBottom: 8,
   },
   routeStats: {
@@ -296,5 +323,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: Theme.text,
+  },
+  viewStopsTextMuted: {
+    color: Theme.textMuted,
   },
 });

@@ -14,6 +14,8 @@ export interface RouteItem {
   stopsCount: number;
   duration: string;
   studentsCount: number;
+  /** Another driver has an active trip on this route (driver trip-setup only). */
+  lockedByOtherDriverTrip?: boolean;
 }
 
 export interface ScheduleItem {

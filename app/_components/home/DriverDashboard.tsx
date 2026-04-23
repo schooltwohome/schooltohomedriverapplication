@@ -12,6 +12,7 @@ import {
   postDriverTripComplete,
   postDriverTripStart,
 } from "../../../services/driverHelperApi";
+import { ApiHttpError } from "../../../services/http";
 
 interface DriverDashboardProps {
   onLiveTripChange?: (live: boolean) => void;
@@ -86,6 +87,10 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
       } catch (e) {
         const msg =
           e instanceof Error ? e.message : "Could not register trip start on the server";
+        if (e instanceof ApiHttpError && e.status === 409) {
+          Alert.alert("Route unavailable", msg);
+          return;
+        }
         Alert.alert(
           "Could not notify parents",
           `${msg}\n\nYour trip will still open. Check your connection or try ending the trip and starting again.`

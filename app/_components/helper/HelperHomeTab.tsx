@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, ActivityIndicator, View } from "react-nat
 
 import { useHelperAssignment } from "../../_context/HelperAssignmentContext";
 import HelperBusRouteCard from "./HelperBusRouteCard";
+import HelperTripControlsCard from "./HelperTripControlsCard";
 import HelperAttendanceSummaryCard from "./HelperAttendanceSummaryCard";
 import HelperQuickActions from "./HelperQuickActions";
 import { countAttendanceStatuses } from "./attendanceCounts";
@@ -43,6 +44,7 @@ export default function HelperHomeTab({
         </Text>
       ) : null}
       <HelperBusRouteCard assignment={assignment} liveStudentCount={rosterStudents.length} />
+      <HelperTripControlsCard assignment={assignment} />
       <HelperAttendanceSummaryCard
         onBoard={counts.present}
         pending={counts.pending}

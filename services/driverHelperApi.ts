@@ -113,6 +113,7 @@ export function getMyActiveTrip(token: string) {
   });
 }
 
+/** Complete active trip (driver, or helper who has joined the trip — pass busId and routeId). */
 export function postDriverTripComplete(token: string, payload?: { busId?: number; routeId?: number }) {
   return apiRequest<{ trip: Record<string, unknown> }>("/api/v1/users/me/trip-complete", {
     method: "POST",
@@ -124,6 +125,7 @@ export function postDriverTripComplete(token: string, payload?: { busId?: number
   });
 }
 
+/** Cancel active trip (driver, or helper who has joined — pass busId and routeId). */
 export function postDriverTripCancel(token: string, payload?: { busId?: number; routeId?: number }) {
   return apiRequest<{ trip: Record<string, unknown> }>("/api/v1/users/me/trip-cancel", {
     method: "POST",
@@ -135,7 +137,7 @@ export function postDriverTripCancel(token: string, payload?: { busId?: number; 
   });
 }
 
-/** POST /users/me/trip-start — registers trip on server and notifies parents (driver role only). */
+/** POST /users/me/trip-start — registers trip on server and notifies parents (driver; helper proxies bus driver). */
 export type TripStartResponse = {
   trip: Record<string, unknown>;
 };

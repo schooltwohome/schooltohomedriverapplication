@@ -31,7 +31,8 @@ export function apiRouteToRouteItem(
     id: r.id,
     name: r.route_name,
     stopsCount: r.stops_count,
-    duration: "—",
+    /** API does not expose ETA yet; time is set in step 3 (schedule). */
+    duration: "Schedule",
     studentsCount: r.students_count,
     lockedByOtherDriverTrip: Boolean(r.locked_by_other_driver_trip),
   };

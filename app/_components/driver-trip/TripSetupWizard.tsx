@@ -33,6 +33,10 @@ export default function TripSetupWizard({ onComplete, prefill }: Props) {
     });
     return () => sub.remove();
   }, [reloadLists]);
+
+  useEffect(() => {
+    if (step === 2) void reloadLists();
+  }, [step, reloadLists]);
   const [step, setStep] = useState<1 | 2 | 3 | 4>(hasPrefill ? 3 : 1);
   const [tripData, setTripData] = useState<TripData>(() => ({
     bus: prefill?.bus ?? null,

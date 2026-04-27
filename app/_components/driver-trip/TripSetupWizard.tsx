@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, StyleSheet, TouchableOpacity, Text } from "react-native";
+import React, { useEffect, useState } from "react";
+import { AppState, View, StyleSheet, TouchableOpacity, Text } from "react-native";
 import { ArrowLeft } from "lucide-react-native";
 
 import { Theme } from "../../_theme/theme";
@@ -9,6 +9,8 @@ import SelectRouteStep from "./SelectRouteStep";
 import ScheduleTripStep from "./ScheduleTripStep";
 import TripConfirmationStep from "./TripConfirmationStep";
 import { useTripSetupLists } from "../../hooks/useTripSetupLists";
+import { useAppSelector } from "../../../store/hooks";
+import { normalizeRole } from "../../types/roles";
 
 interface Props {
   onComplete: (data: TripData) => void | Promise<void>;
@@ -19,9 +21,18 @@ interface Props {
 const TOTAL_STEPS = 4;
 
 export default function TripSetupWizard({ onComplete, prefill }: Props) {
+  const me = useAppSelector((s) => s.auth.me);
+  const role = normalizeRole(me?.user?.role);
   const { buses, routes, loading: listsLoading, error: listsError, reload: reloadLists } =
     useTripSetupLists();
   const hasPrefill = Boolean(prefill?.bus && prefill?.route);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void reloadLists();
+    });
+    return () => sub.remove();
+  }, [reloadLists]);
   const [step, setStep] = useState<1 | 2 | 3 | 4>(hasPrefill ? 3 : 1);
   const [tripData, setTripData] = useState<TripData>(() => ({
     bus: prefill?.bus ?? null,
@@ -90,6 +101,11 @@ export default function TripSetupWizard({ onComplete, prefill }: Props) {
             loading={listsLoading}
             error={listsError}
             onRetry={reloadLists}
+            extraHint={
+              role === "driver"
+                ? "If you signed out with a trip still open, your bus should show as Available so you can continue."
+                : undefined
+            }
             onNext={(bus) => {
               setTripData({ ...tripData, bus });
               handleNextStep();

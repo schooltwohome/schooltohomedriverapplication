@@ -35,7 +35,7 @@ export function useTripSetupLists() {
   }, [token]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   return { buses, routes, loading, error, reload: load };

@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Alert, View, StyleSheet } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert, AppState, View, StyleSheet } from "react-native";
 import TripSetupWizard from "../driver-trip/TripSetupWizard";
 import LiveTripDashboard from "../driver-trip/LiveTripDashboard";
 import { captureTripStartSnapshot } from "../driver-trip/tripStartLocation";
@@ -30,46 +30,56 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
   const [isLive, setIsLive] = useState(false);
   const [activeTripData, setActiveTripData] = useState<TripData | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!token) return;
-      try {
-        const active = await getMyActiveTrip(token);
-        if (cancelled) return;
-        if (active?.trip && active.bus && active.route) {
-          const tripStart = await captureTripStartSnapshot();
-          if (cancelled) return;
-          setActiveTripData({
-            bus: {
-              id: active.bus.id,
-              name: `Bus ${active.bus.bus_number}`,
-              licensePlate: active.bus.number_plate?.trim()
-                ? active.bus.number_plate
-                : "—",
-              seats: 0,
-              status: "In Use",
-            },
-            route: {
-              id: active.route.id,
-              name: active.route.route_name,
-              stopsCount: 0,
-              duration: "—",
-              studentsCount: 0,
-            },
-            schedule: null,
-            tripStart,
-          });
-          setIsLive(true);
-        }
-      } catch {
-        // no-op: fall back to wizard (network errors etc.)
+  const loadActiveTripFromServer = useCallback(async () => {
+    if (!token) {
+      setIsLive(false);
+      setActiveTripData(null);
+      return;
+    }
+    try {
+      const active = await getMyActiveTrip(token);
+      if (!active?.trip || !active.bus || !active.route) {
+        setIsLive(false);
+        setActiveTripData(null);
+        return;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      const tripStart = await captureTripStartSnapshot();
+      setActiveTripData({
+        bus: {
+          id: active.bus.id,
+          name: `Bus ${active.bus.bus_number}`,
+          licensePlate: active.bus.number_plate?.trim()
+            ? active.bus.number_plate
+            : "—",
+          seats: 0,
+          status: "In Use",
+        },
+        route: {
+          id: active.route.id,
+          name: active.route.route_name,
+          stopsCount: 0,
+          duration: "—",
+          studentsCount: 0,
+        },
+        schedule: null,
+        tripStart,
+      });
+      setIsLive(true);
+    } catch {
+      /* Keep current UI on transient errors so we do not kick a live driver back to the wizard offline. */
+    }
   }, [token]);
+
+  useEffect(() => {
+    void loadActiveTripFromServer();
+  }, [loadActiveTripFromServer]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void loadActiveTripFromServer();
+    });
+    return () => sub.remove();
+  }, [loadActiveTripFromServer]);
 
   useEffect(() => {
     onLiveTripChange?.(isLive);
@@ -129,6 +139,7 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
             } catch (e) {
               const msg = e instanceof Error ? e.message : "Could not cancel the trip on the server";
               Alert.alert("Cancel trip", msg);
+              return;
             }
           }
           setIsLive(false);
@@ -144,6 +155,7 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
             } catch (e) {
               const msg = e instanceof Error ? e.message : "Could not complete the trip on the server";
               Alert.alert("Complete trip", msg);
+              return;
             }
           }
           setIsLive(false);

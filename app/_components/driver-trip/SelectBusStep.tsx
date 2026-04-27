@@ -11,6 +11,8 @@ interface Props {
   loading?: boolean;
   error?: string | null;
   onRetry?: () => void;
+  /** Shown under the subtitle (e.g. driver tip after re-login). */
+  extraHint?: string;
   /** Overrides the default "Step 1 of 4" label (e.g. helper flow uses 2 steps). */
   stepLabel?: string;
   /** When true, hides the step line (e.g. parent wizard shows step + progress). */
@@ -23,6 +25,7 @@ export default function SelectBusStep({
   loading = false,
   error = null,
   onRetry,
+  extraHint,
   stepLabel = "Step 1 of 4",
   hideStepLabel = false,
 }: Props) {
@@ -56,6 +59,7 @@ export default function SelectBusStep({
             ? "Choose the bus you are supporting today"
             : "Select the bus assigned for your trip today"}
         </Text>
+        {extraHint ? <Text style={styles.extraHint}>{extraHint}</Text> : null}
       </View>
 
       {error ? (
@@ -157,6 +161,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Theme.textSecondary,
     lineHeight: 22,
+  },
+  extraHint: {
+    marginTop: 10,
+    fontSize: 13,
+    color: Theme.textMuted,
+    lineHeight: 18,
+    fontWeight: "600",
   },
   listContainer: {
     flexGrow: 1,

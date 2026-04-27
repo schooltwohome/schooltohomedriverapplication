@@ -96,11 +96,13 @@ export function getTripSetup(token: string) {
 export type MyActiveTripResponse = {
   trip: {
     id: string;
+    /** e.g. `on_going`, `scheduled`, `completed`, `cancelled` */
     status: string;
     trip_date: string | null;
     scheduled_start: string | null;
     actual_start: string | null;
     actual_end: string | null;
+    auto_cancelled?: boolean;
   } | null;
   bus: { id: string; bus_number: string; number_plate: string | null } | null;
   route: { id: string; route_name: string } | null;

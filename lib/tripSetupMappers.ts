@@ -13,12 +13,14 @@ const API_BUS_STATUS_TO_UI: Record<
 export function apiBusToBusItem(
   b: TripSetupResponse["buses"][number]
 ): BusItem {
+  const mapped =
+    API_BUS_STATUS_TO_UI[b.status as keyof typeof API_BUS_STATUS_TO_UI];
   return {
     id: b.id,
     name: `Bus ${b.bus_number}`,
     licensePlate: b.number_plate?.trim() ? b.number_plate : "—",
     seats: b.capacity ?? 0,
-    status: API_BUS_STATUS_TO_UI[b.status],
+    status: mapped ?? "Available",
   };
 }
 

@@ -155,3 +155,6 @@ export function useHelperAssignment() {
   }
   return ctx;
 }
+
+// Default export added to satisfy Expo Router typed-routes scanning.
+export default {};

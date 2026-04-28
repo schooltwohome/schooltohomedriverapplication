@@ -58,6 +58,8 @@ export type TripSetupResponse = {
     students_count: number;
     locked_by_other_driver_trip?: boolean;
   }>;
+  /** Present for helpers: bus+route pairs where the driver has started and this helper may join. */
+  helper_joinable_trips?: Array<{ bus_id: string; route_id: string }>;
 };
 
 export function requestAuthOtp(identifier: string, deliveryMethod: "sms" | "email" = "sms") {
@@ -128,13 +130,17 @@ export function postDriverTripComplete(token: string, payload?: { busId?: number
 }
 
 /** Cancel active trip (driver, or helper who has joined — pass busId and routeId). */
-export function postDriverTripCancel(token: string, payload?: { busId?: number; routeId?: number }) {
+export function postDriverTripCancel(
+  token: string,
+  payload?: { busId?: number; routeId?: number; manualAbort?: boolean }
+) {
   return apiRequest<{ trip: Record<string, unknown> }>("/api/v1/users/me/trip-cancel", {
     method: "POST",
     token,
     body: JSON.stringify({
       ...(payload?.busId != null ? { busId: payload.busId } : {}),
       ...(payload?.routeId != null ? { routeId: payload.routeId } : {}),
+      ...(payload?.manualAbort != null ? { manualAbort: payload.manualAbort } : {}),
     }),
   });
 }

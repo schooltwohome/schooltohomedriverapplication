@@ -74,3 +74,6 @@ export function useLiveLocationReporter(
     };
   }, [enabled, token, busIdNum]);
 }
+
+// Default export added to satisfy Expo Router typed-routes scanning.
+export default useLiveLocationReporter;

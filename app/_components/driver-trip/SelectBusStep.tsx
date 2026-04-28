@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bus, Users, Wrench, AlertCircle, CheckCircle2 } from 'lucide-react-native';
+import { Bus, Users, Wrench, AlertCircle, CheckCircle2, LogOut } from 'lucide-react-native';
 import { Theme } from '../../_theme/theme';
 import { BusItem, BusStatus } from './types';
 
@@ -17,6 +17,13 @@ interface Props {
   stepLabel?: string;
   /** When true, hides the step line (e.g. parent wizard shows step + progress). */
   hideStepLabel?: boolean;
+  /** Helper setup: sign-out row at bottom of list (same pattern as profile). */
+  onLogout?: () => void;
+  /**
+   * Bus IDs that should be selectable even if status isn't "Available".
+   * Used for helper join flow where the driver has started a trip (bus is "In Use").
+   */
+  forceEnabledBusIds?: string[];
 }
 
 export default function SelectBusStep({
@@ -28,6 +35,8 @@ export default function SelectBusStep({
   extraHint,
   stepLabel = "Step 1 of 4",
   hideStepLabel = false,
+  onLogout,
+  forceEnabledBusIds,
 }: Props) {
   const insets = useSafeAreaInsets();
   const scrollBottomPad = Math.max(insets.bottom, 20);
@@ -91,7 +100,8 @@ export default function SelectBusStep({
         ) : null}
 
         {!loading && buses.map((bus) => {
-          const isAvailable = bus.status === 'Available';
+          const isForcedEnabled = forceEnabledBusIds?.includes(String(bus.id)) ?? false;
+          const isAvailable = bus.status === 'Available' || isForcedEnabled;
           return (
             <TouchableOpacity 
               key={bus.id}
@@ -124,6 +134,14 @@ export default function SelectBusStep({
             </TouchableOpacity>
           );
         })}
+        {onLogout ? (
+          <View style={styles.logoutSection}>
+            <TouchableOpacity style={styles.logout} onPress={onLogout} activeOpacity={0.88} accessibilityRole="button" accessibilityLabel="Sign out">
+              <LogOut size={20} color="#B91C1C" />
+              <Text style={styles.logoutText}>Sign out</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -284,5 +302,23 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  logoutSection: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.border,
+  },
+  logout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+  },
+  logoutText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#B91C1C',
   },
 });

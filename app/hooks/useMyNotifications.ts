@@ -85,3 +85,6 @@ export function useMyNotifications(token: string | null) {
     unreadCount,
   };
 }
+
+// Default export added to satisfy Expo Router typed-routes scanning.
+export default useMyNotifications;

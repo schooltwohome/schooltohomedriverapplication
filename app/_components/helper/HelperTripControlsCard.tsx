@@ -7,7 +7,7 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { Play, UserPlus, Square } from "lucide-react-native";
+import { UserPlus, Square } from "lucide-react-native";
 
 import { Theme } from "../../_theme/theme";
 import { useAppSelector } from "../../../store/hooks";
@@ -18,11 +18,8 @@ import {
 import {
   postDriverTripCancel,
   postDriverTripComplete,
-  postDriverTripStart,
   postHelperTripJoin,
 } from "../../../services/driverHelperApi";
-import { ApiHttpError } from "../../../services/http";
-
 type Props = {
   assignment: HelperAssignment;
 };
@@ -30,7 +27,7 @@ type Props = {
 export default function HelperTripControlsCard({ assignment }: Props) {
   const token = useAppSelector((s) => s.auth.token);
   const { refetchRoster, clearAssignment } = useHelperAssignment();
-  const [busyAction, setBusyAction] = useState<null | "join" | "start" | "end">(null);
+  const [busyAction, setBusyAction] = useState<null | "join" | "end">(null);
   const busy = busyAction !== null;
 
   const busId = useMemo(() => {
@@ -57,25 +54,6 @@ export default function HelperTripControlsCard({ assignment }: Props) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not join trip";
       Alert.alert("Join trip", msg);
-    } finally {
-      setBusyAction(null);
-    }
-  }, [token, busId, routeId, afterOk]);
-
-  const onStartTrip = useCallback(async () => {
-    if (!token || busId == null || routeId == null) return;
-    setBusyAction("start");
-    try {
-      await postDriverTripStart(token, { busId, routeId });
-      await afterOk();
-      Alert.alert("Trip start", "Trip is registered on the server and parents are notified when applicable.");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Could not start trip";
-      if (e instanceof ApiHttpError && e.status === 409) {
-        Alert.alert("Route unavailable", msg);
-      } else {
-        Alert.alert("Trip start", msg);
-      }
     } finally {
       setBusyAction(null);
     }
@@ -134,43 +112,25 @@ export default function HelperTripControlsCard({ assignment }: Props) {
     <View style={styles.card}>
       <Text style={styles.title}>Trip controls</Text>
       <Text style={styles.sub}>
-        Join after the driver has opened a trip, or start/update the trip if you are assigned on this bus with a
-        driver. End trip requires you to have joined this trip.
+        The driver must start the trip first. Then use Join to attach to the same bus and route. Use End trip when the
+        run is finished (you should be joined on this trip first).
       </Text>
 
-      <View style={styles.row}>
-        <TouchableOpacity
-          style={[styles.btn, styles.btnSecondary, disabled && styles.btnDisabled]}
-          onPress={onJoinTrip}
-          disabled={disabled}
-          activeOpacity={0.85}
-        >
-          {busyAction === "join" ? (
-            <ActivityIndicator color={Theme.text} />
-          ) : (
-            <>
-              <UserPlus size={20} color={Theme.text} />
-              <Text style={styles.btnText}>Join trip</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.btn, styles.btnPrimary, disabled && styles.btnDisabled]}
-          onPress={onStartTrip}
-          disabled={disabled}
-          activeOpacity={0.85}
-        >
-          {busyAction === "start" ? (
-            <ActivityIndicator color={Theme.bg} />
-          ) : (
-            <>
-              <Play size={20} color={Theme.bg} />
-              <Text style={[styles.btnText, styles.btnTextOnPrimary]}>Start trip</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        style={[styles.btnFull, styles.btnSecondary, styles.joinBtn, disabled && styles.btnDisabled]}
+        onPress={onJoinTrip}
+        disabled={disabled}
+        activeOpacity={0.85}
+      >
+        {busyAction === "join" ? (
+          <ActivityIndicator color={Theme.text} />
+        ) : (
+          <>
+            <UserPlus size={20} color={Theme.text} />
+            <Text style={styles.btnText}>Join trip</Text>
+          </>
+        )}
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={[styles.btnFull, styles.btnOutline, disabled && styles.btnDisabled]}
@@ -214,21 +174,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 14,
   },
-  row: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 10,
-  },
-  btn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 14,
-    minHeight: 48,
-  },
   btnFull: {
     flexDirection: "row",
     alignItems: "center",
@@ -238,8 +183,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     minHeight: 48,
   },
-  btnPrimary: {
-    backgroundColor: Theme.text,
+  joinBtn: {
+    marginBottom: 10,
   },
   btnSecondary: {
     backgroundColor: Theme.bgMuted,
@@ -258,8 +203,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: Theme.text,
-  },
-  btnTextOnPrimary: {
-    color: Theme.bg,
   },
 });

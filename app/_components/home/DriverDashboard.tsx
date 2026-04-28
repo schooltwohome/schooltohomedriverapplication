@@ -43,28 +43,10 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
         setActiveTripData(null);
         return;
       }
-      const tripStart = await captureTripStartSnapshot();
-      setActiveTripData({
-        bus: {
-          id: active.bus.id,
-          name: `Bus ${active.bus.bus_number}`,
-          licensePlate: active.bus.number_plate?.trim()
-            ? active.bus.number_plate
-            : "—",
-          seats: 0,
-          status: "In Use",
-        },
-        route: {
-          id: active.route.id,
-          name: active.route.route_name,
-          stopsCount: 0,
-          duration: "—",
-          studentsCount: 0,
-        },
-        schedule: null,
-        tripStart,
-      });
-      setIsLive(true);
+      // If the driver already has an active trip, force them through the abort flow
+      // in the trip setup wizard (prevents "stuck IN_USE" bus/route).
+      setIsLive(false);
+      setActiveTripData(null);
     } catch {
       /* Keep current UI on transient errors so we do not kick a live driver back to the wizard offline. */
     }
@@ -123,6 +105,11 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
     setIsLive(true);
   };
 
+  const handleResumeTrip = (data: TripData) => {
+    setActiveTripData(data);
+    setIsLive(true);
+  };
+
   const handleEndTrip = () => {
     const busId = activeTripData?.bus?.id != null ? Number(activeTripData.bus.id) : undefined;
     const routeId = activeTripData?.route?.id != null ? Number(activeTripData.route.id) : undefined;
@@ -174,6 +161,7 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
           key={me?.assignment?.bus.id ?? "trip-setup"}
           prefill={prefill}
           onComplete={handleStartTrip}
+          onResumeActiveTrip={handleResumeTrip}
         />
       )}
     </View>

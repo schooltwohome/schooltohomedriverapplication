@@ -6,3 +6,6 @@ export function normalizeRole(role: string | null | undefined): UserRole | null 
   if (r === "helper") return "helper";
   return null;
 }
+
+// Default export added to satisfy Expo Router typed-routes scanning.
+export default {};

@@ -42,3 +42,6 @@ export interface TripData {
   schedule: ScheduleItem | null;
   tripStart?: TripStartSnapshot;
 }
+
+// Default export added to satisfy Expo Router typed-routes scanning.
+export default {};

@@ -22,3 +22,6 @@ export async function captureTripStartSnapshot(): Promise<TripStartSnapshot> {
     return { startedAtMs, driverLocation: null };
   }
 }
+
+// Default export added to satisfy Expo Router typed-routes scanning.
+export default {};

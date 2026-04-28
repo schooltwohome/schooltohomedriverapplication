@@ -5,6 +5,8 @@ export function assignmentToBusRoute(assignment: MeAssignment): {
   bus: BusItem;
   route: RouteItem;
 } {
+  // Helpers should see the bus identity; status from `/users/me` doesn't include operational status.
+  // Default to "In Use" because the assignment exists when a driver has started/has an active trip.
   const bus: BusItem = {
     id: assignment.bus.id,
     name: `Bus ${assignment.bus.bus_number}`,

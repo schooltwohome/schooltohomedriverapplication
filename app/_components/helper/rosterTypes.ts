@@ -10,3 +10,6 @@ export interface HelperStudentRow {
   assignedToTrip?: boolean;
   isPresent?: boolean;
 }
+
+// Default export added to satisfy Expo Router typed-routes scanning.
+export default {};

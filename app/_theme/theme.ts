@@ -24,3 +24,6 @@ export const Theme = {
 } as const;
 
 export type ThemeType = typeof Theme;
+
+// Default export added to satisfy Expo Router typed-routes scanning.
+export default Theme;

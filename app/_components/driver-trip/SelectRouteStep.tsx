@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Map, Clock, Users, ChevronRight, Bus } from 'lucide-react-native';
+import { Map, Clock, Users, ChevronRight, Bus, LogOut } from 'lucide-react-native';
 import { Theme } from '../../_theme/theme';
 import { BusItem, RouteItem } from './types';
 
@@ -15,6 +15,9 @@ interface Props {
   /** Overrides the default "Step 2 of 4" label (e.g. helper flow uses 2 steps). */
   stepLabel?: string;
   hideStepLabel?: boolean;
+  onLogout?: () => void;
+  /** Shown when there are zero routes (e.g. helper filtered list). */
+  emptyRoutesFallback?: string;
 }
 
 export default function SelectRouteStep({
@@ -26,6 +29,8 @@ export default function SelectRouteStep({
   onRetry,
   stepLabel = "Step 2 of 4",
   hideStepLabel = false,
+  onLogout,
+  emptyRoutesFallback = "No routes are set up for your school yet.",
 }: Props) {
   const insets = useSafeAreaInsets();
   const scrollBottomPad = Math.max(insets.bottom, 20);
@@ -78,7 +83,7 @@ export default function SelectRouteStep({
         ) : null}
 
         {!loading && !error && routes.length === 0 ? (
-          <Text style={styles.emptyText}>No routes are set up for your school yet.</Text>
+          <Text style={styles.emptyText}>{emptyRoutesFallback}</Text>
         ) : null}
 
         {!loading && routes.map((route) => {
@@ -130,6 +135,14 @@ export default function SelectRouteStep({
           </TouchableOpacity>
           );
         })}
+        {onLogout ? (
+          <View style={styles.logoutSection}>
+            <TouchableOpacity style={styles.logout} onPress={onLogout} activeOpacity={0.88} accessibilityRole="button" accessibilityLabel="Sign out">
+              <LogOut size={20} color="#B91C1C" />
+              <Text style={styles.logoutText}>Sign out</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -326,5 +339,23 @@ const styles = StyleSheet.create({
   },
   viewStopsTextMuted: {
     color: Theme.textMuted,
+  },
+  logoutSection: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.border,
+  },
+  logout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+  },
+  logoutText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#B91C1C',
   },
 });

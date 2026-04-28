@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { View, StyleSheet, TouchableOpacity, Text, Alert } from "react-native";
 import { ArrowLeft } from "lucide-react-native";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Theme } from "../../_theme/theme";
@@ -8,7 +9,8 @@ import SelectBusStep from "../driver-trip/SelectBusStep";
 import SelectRouteStep from "../driver-trip/SelectRouteStep";
 import { BusItem, RouteItem } from "../driver-trip/types";
 import { useTripSetupLists } from "../../hooks/useTripSetupLists";
-import { useAppSelector } from "../../../store/hooks";
+import { useAppDispatch, useAppSelector } from "../../../store/hooks";
+import { logoutThunk } from "../../../store/slices/authSlice";
 import { postHelperTripJoin } from "../../../services/driverHelperApi";
 
 const TOTAL_STEPS = 2;
@@ -19,12 +21,49 @@ interface Props {
 
 export default function HelperAssignmentWizard({ onComplete }: Props) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const dispatch = useAppDispatch();
   const token = useAppSelector((s) => s.auth.token);
-  const { buses, routes, loading: listsLoading, error: listsError, reload: reloadLists } =
-    useTripSetupLists();
+
+  const confirmLogout = () => {
+    Alert.alert("Sign out?", undefined, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign out",
+        style: "destructive",
+        onPress: async () => {
+          await dispatch(logoutThunk());
+          router.replace("/screens/Auth/LoginScreen" as any);
+        },
+      },
+    ]);
+  };
+  const {
+    buses,
+    routes,
+    helperJoinableTrips,
+    loading: listsLoading,
+    error: listsError,
+    reload: reloadLists,
+  } = useTripSetupLists();
   const [step, setStep] = useState<1 | 2>(1);
   const [selectedBus, setSelectedBus] = useState<BusItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const routesForSelectedBus = useMemo(() => {
+    if (!selectedBus) return routes;
+    const bid = String(selectedBus.id);
+    if (helperJoinableTrips.length === 0) return routes;
+    const allowed = new Set(
+      helperJoinableTrips.filter((j) => j.bus_id === bid).map((j) => j.route_id)
+    );
+    return routes.filter((r) => allowed.has(r.id));
+  }, [routes, selectedBus, helperJoinableTrips]);
+
+  const joinableBusIds = useMemo(() => {
+    if (helperJoinableTrips.length === 0) return [];
+    return Array.from(new Set(helperJoinableTrips.map((j) => String(j.bus_id))));
+  }, [helperJoinableTrips]);
 
   const handleBusNext = (bus: BusItem) => {
     setSelectedBus(bus);
@@ -49,10 +88,7 @@ export default function HelperAssignmentWizard({ onComplete }: Props) {
       onComplete(selectedBus, route);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not join this bus";
-      Alert.alert(
-        "Bus already selected",
-        `${msg}\n\nAnother helper may have already selected this bus. Please choose a different bus.`
-      );
+      Alert.alert("Could not join", msg);
       await reloadLists();
       setSelectedBus(null);
       setStep(1);
@@ -61,7 +97,15 @@ export default function HelperAssignmentWizard({ onComplete }: Props) {
     }
   };
 
-  const stepHint = step === 1 ? "Bus first, then route" : "Almost done";
+  const stepHint =
+    step === 1
+      ? "Only buses with a trip the driver has started are available"
+      : "Pick the route for this bus";
+
+  const busPickerHint =
+    helperJoinableTrips.length === 0 && !listsLoading
+      ? "Wait for the driver to start their trip. When they do, the right bus will show as available."
+      : undefined;
 
   return (
     <View
@@ -132,17 +176,22 @@ export default function HelperAssignmentWizard({ onComplete }: Props) {
             error={listsError}
             onRetry={reloadLists}
             onNext={handleBusNext}
+            onLogout={confirmLogout}
+            extraHint={busPickerHint}
+            forceEnabledBusIds={joinableBusIds}
           />
         )}
         {step === 2 && (
           <SelectRouteStep
             hideStepLabel
             selectedBus={selectedBus}
-            routes={routes}
+            routes={routesForSelectedBus}
             loading={listsLoading || submitting}
             error={listsError}
             onRetry={reloadLists}
             onNext={handleRouteNext}
+            onLogout={confirmLogout}
+            emptyRoutesFallback="No matching trip on this bus. The driver must start the trip for this route first, then try again."
           />
         )}
       </View>

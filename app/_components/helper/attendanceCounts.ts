@@ -11,3 +11,6 @@ export function countAttendanceStatuses(students: HelperStudentRow[]) {
   }
   return { present, pending, absent };
 }
+
+// Default export added to satisfy Expo Router typed-routes scanning.
+export default {};

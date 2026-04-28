@@ -43,8 +43,6 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
   const { assignment, rosterStudents, setStudentAttendance, refetchRoster } = useHelperAssignment();
   const [nfcListening, setNfcListening] = useState(false);
   const [nfcUi, setNfcUi] = useState<NfcUiState>({ type: "idle" });
-  // Backend currently supports simulate endpoint; keep real mode as an optional switch for later.
-  const [devSimulateTap, setDevSimulateTap] = useState(true);
 
   const onNfcStatus = useCallback((msg: NfcUiState) => {
     setNfcUi(msg);
@@ -84,8 +82,7 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
     token,
     routeIdNum,
     busIdNum,
-    mode: devSimulateTap ? "simulate" : "real",
-    simulateStudentUuid: rosterStudents[0]?.id ?? null,
+    mode: "real",
     onAttendanceChanged: onMarkedPresent,
     onStatus: onNfcStatus,
   });
@@ -121,11 +118,6 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
     setNfcUi({ type: "idle" });
   }, []);
 
-  const toggleDevSimulate = useCallback(() => {
-    setDevSimulateTap((v) => !v);
-    setNfcUi({ type: "idle" });
-  }, []);
-
   const totals = countAttendanceStatuses(rosterStudents);
 
   if (!assignment) return null;
@@ -155,33 +147,13 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
           <Text style={styles.tileBody}>
             {nfcListening
               ? "Hold student RFID cards to the phone — each tap marks present on the active trip."
-              : devSimulateTap
-                ? "Turn on, then tap any RFID card; the app simulates marking one absent student present."
-                : "Turn on, then tap each student RFID; the app sends the card ID to the server."}
+              : "Turn on, then tap each student RFID; the app sends the card ID to the server."}
           </Text>
         </View>
         {nfcListening && nfcUi.type === "processing" ? (
           <ActivityIndicator color={Theme.text} />
         ) : null}
       </TouchableOpacity>
-
-      {typeof __DEV__ !== "undefined" && __DEV__ ? (
-        <TouchableOpacity
-          style={[styles.tile, devSimulateTap && styles.tileActive]}
-          activeOpacity={0.9}
-          onPress={toggleDevSimulate}
-        >
-          <Radio size={24} color={Theme.text} />
-          <View style={styles.tileText}>
-            <Text style={[styles.tileTitle, styles.tileTitleDark]}>
-              {devSimulateTap ? "Dev: Simulate tap (ON)" : "Dev: Simulate tap (OFF)"}
-            </Text>
-            <Text style={styles.tileBodyDark}>
-              When ON, each RFID read triggers `/users/me/attendance/simulate-nfc-tap` instead of UID mapping.
-            </Text>
-          </View>
-        </TouchableOpacity>
-      ) : null}
 
       {nfcListening ? (
         <View style={styles.nfcBanner}>

@@ -49,7 +49,7 @@ export function useHelperNfcAttendance({
   token,
   routeIdNum,
   busIdNum,
-  mode = "simulate",
+  mode = "real",
   simulateStudentUuid = null,
   onAttendanceChanged,
   onStatus,

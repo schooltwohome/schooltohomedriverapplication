@@ -36,21 +36,19 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
       setActiveTripData(null);
       return;
     }
+    // Never kick a driver out of the live trip screen due to background refreshes.
+    // On Android APK builds, permission prompts can cause AppState transitions that
+    // would otherwise bounce the UI back to the wizard immediately after start/resume.
+    if (isLive) return;
     try {
       const active = await getMyActiveTrip(token);
-      if (!active?.trip || !active.bus || !active.route) {
-        setIsLive(false);
-        setActiveTripData(null);
-        return;
-      }
-      // If the driver already has an active trip, force them through the abort flow
-      // in the trip setup wizard (prevents "stuck IN_USE" bus/route).
-      setIsLive(false);
-      setActiveTripData(null);
+      // Trip setup screens handle the "active trip" gate themselves (Resume/Abort).
+      // This refresh is only to clear state when the user is signed out.
+      void active;
     } catch {
       /* Keep current UI on transient errors so we do not kick a live driver back to the wizard offline. */
     }
-  }, [token]);
+  }, [token, isLive]);
 
   useEffect(() => {
     void loadActiveTripFromServer();

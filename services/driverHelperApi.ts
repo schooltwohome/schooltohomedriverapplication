@@ -377,3 +377,36 @@ export function postBusAttendanceNfcTap(
     }),
   });
 }
+
+export type ManualMarkAttendanceResult = {
+  student: {
+    uuid: string;
+    name: string;
+  };
+  attendance: {
+    /** `boarded` maps to roster `present`; `absent` maps to roster `absent`. */
+    status: "boarded" | "absent";
+    boarded_at: string | null;
+  };
+};
+
+export function postBusAttendanceManualMark(
+  token: string,
+  payload: {
+    busId: number;
+    routeId: number;
+    studentUuid: string;
+    status: "present" | "absent";
+  }
+) {
+  return apiRequest<ManualMarkAttendanceResult>("/api/v1/bus/attendance/manual-mark", {
+    method: "POST",
+    token,
+    body: JSON.stringify({
+      busId: payload.busId,
+      routeId: payload.routeId,
+      studentUuid: payload.studentUuid,
+      status: payload.status,
+    }),
+  });
+}

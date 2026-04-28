@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
 import { Radio, PenLine } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
@@ -18,12 +19,7 @@ import HelperStudentRosterRow from "./HelperStudentRosterRow";
 import { countAttendanceStatuses } from "./attendanceCounts";
 import { useAppSelector } from "../../../store/hooks";
 import { useHelperNfcAttendance } from "../../../hooks/useHelperNfcAttendance";
-
-function nextStatus(current: AttendanceStatus): AttendanceStatus {
-  if (current === "present") return "pending";
-  if (current === "pending") return "absent";
-  return "present";
-}
+import { postBusAttendanceManualMark } from "../../../services/driverHelperApi";
 
 type NfcUiState = {
   type: "idle" | "listening" | "processing" | "success" | "error";
@@ -43,6 +39,8 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
   const { assignment, rosterStudents, setStudentAttendance, refetchRoster } = useHelperAssignment();
   const [nfcListening, setNfcListening] = useState(false);
   const [nfcUi, setNfcUi] = useState<NfcUiState>({ type: "idle" });
+  const [search, setSearch] = useState("");
+  const [manualBusyIds, setManualBusyIds] = useState<Record<string, boolean>>({});
 
   const onNfcStatus = useCallback((msg: NfcUiState) => {
     setNfcUi(msg);
@@ -95,22 +93,66 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
   }, [bootstrap, onBootstrapConsumed]);
 
   const openManual = useCallback(() => {
-    Alert.alert(
-      "Manual mode",
-      "Tap any student row below to cycle Present → Pending → Absent."
-    );
+    Alert.alert("Manual marking", "Search by student name, then tap to mark Present or Absent.");
   }, []);
+
+  const markManual = useCallback(
+    async (studentUuid: string, next: "present" | "absent") => {
+      if (!token || busIdNum == null || routeIdNum == null) {
+        Alert.alert("Missing assignment", "Bus/route assignment is required to mark attendance.");
+        return;
+      }
+      if (manualBusyIds[studentUuid]) return;
+
+      setManualBusyIds((prev) => ({ ...prev, [studentUuid]: true }));
+      try {
+        const result = await postBusAttendanceManualMark(token, {
+          busId: busIdNum,
+          routeId: routeIdNum,
+          studentUuid,
+          status: next,
+        });
+
+        const newStatus: AttendanceStatus = result.attendance.status === "absent" ? "absent" : "present";
+        setStudentAttendance(studentUuid, {
+          status: newStatus,
+          boardedAt: newStatus === "present" ? result.attendance.boarded_at ?? new Date().toISOString() : null,
+        });
+        await refetchRoster();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Could not update attendance";
+        Alert.alert("Could not update", msg);
+      } finally {
+        setManualBusyIds((prev) => ({ ...prev, [studentUuid]: false }));
+      }
+    },
+    [token, busIdNum, routeIdNum, manualBusyIds, setStudentAttendance, refetchRoster]
+  );
 
   const onRowPress = useCallback(
     (id: string, status: AttendanceStatus) => {
-      const newStatus = nextStatus(status);
-      setStudentAttendance(id, {
-        status: newStatus,
-        boardedAt: newStatus === "present" ? new Date().toISOString() : null,
-      });
-      void refetchRoster();
+      const title = "Manual attendance";
+      const message =
+        status === "present"
+          ? "This student is currently Present. Mark Absent?"
+          : status === "absent"
+            ? "This student is currently Absent. Mark Present?"
+            : "Mark this student Present or Absent?";
+
+      Alert.alert(title, message, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Mark Present",
+          onPress: () => void markManual(id, "present"),
+        },
+        {
+          text: "Mark Absent",
+          style: "destructive",
+          onPress: () => void markManual(id, "absent"),
+        },
+      ]);
     },
-    [setStudentAttendance, refetchRoster]
+    [markManual]
   );
 
   const toggleNfc = useCallback(() => {
@@ -121,6 +163,12 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
   const totals = countAttendanceStatuses(rosterStudents);
 
   if (!assignment) return null;
+
+  const filtered = rosterStudents.filter((s) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return String(s.name ?? "").toLowerCase().includes(q);
+  });
 
   return (
     <ScrollView
@@ -179,21 +227,39 @@ export default function HelperAttendanceTab({ bootstrap, onBootstrapConsumed }: 
         </View>
       </TouchableOpacity>
 
+      <View style={styles.searchWrap}>
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search student name…"
+          placeholderTextColor={Theme.textMuted}
+          style={styles.searchInput}
+          autoCorrect={false}
+          autoCapitalize="none"
+          returnKeyType="search"
+        />
+        <Text style={styles.searchHint}>
+          Tap a student to mark Present/Absent
+          {filtered.length !== rosterStudents.length ? ` · ${filtered.length} shown` : ""}
+        </Text>
+      </View>
+
       <View style={styles.listHeader}>
         <Text style={styles.listTitle}>All students</Text>
-        <Text style={styles.listHint}>Tap a row to change status, or use RFID above</Text>
+        <Text style={styles.listHint}>Tap a row to mark Present/Absent, or use RFID above</Text>
       </View>
 
       <View style={styles.listCard}>
-        {rosterStudents.map((s, index) => (
+        {filtered.map((s, index) => (
           <TouchableOpacity
             key={s.id}
             activeOpacity={0.75}
             onPress={() => onRowPress(s.id, s.status)}
+            disabled={!!manualBusyIds[s.id]}
           >
             <HelperStudentRosterRow
               student={s}
-              isLast={index === rosterStudents.length - 1}
+              isLast={index === filtered.length - 1}
             />
           </TouchableOpacity>
         ))}
@@ -315,5 +381,25 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     marginBottom: 8,
     overflow: "hidden",
+  },
+  searchWrap: {
+    marginTop: 2,
+    marginBottom: 12,
+  },
+  searchInput: {
+    backgroundColor: Theme.bg,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: Theme.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: Theme.text,
+    fontWeight: "700",
+  },
+  searchHint: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textMuted,
   },
 });

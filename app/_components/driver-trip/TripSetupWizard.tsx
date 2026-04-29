@@ -170,6 +170,7 @@ export default function TripSetupWizard({ onComplete, prefill, onResumeActiveTri
         },
         schedule: null,
         tripStart: { startedAtMs, driverLocation: null },
+        tripId: res.trip?.id != null ? String(res.trip.id) : undefined,
       };
 
       // Intentionally do not call `onComplete` here — we are resuming an existing server trip.

@@ -40,6 +40,8 @@ export interface TripData {
   bus: BusItem | null;
   route: RouteItem | null;
   schedule: ScheduleItem | null;
+  /** Set when the active trip is registered on the server (start or resume). */
+  tripId?: string;
   tripStart?: TripStartSnapshot;
 }
 

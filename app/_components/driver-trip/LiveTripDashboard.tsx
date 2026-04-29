@@ -16,7 +16,7 @@ import { TripData, TripCoords } from "./types";
 import { useAppDispatch, useAppSelector } from "../../../store/hooks";
 import { logoutThunk } from "../../../store/slices/authSlice";
 import { useLiveLocationReporter } from "../../hooks/useLiveLocationReporter";
-import { getRouteStopsLive } from "../../../services/driverHelperApi";
+import { getRouteStopsLive, postTripStopCompleted } from "../../../services/driverHelperApi";
 import type { RouteStopsLiveResponse } from "../../../services/driverHelperApi";
 import LiveTripHeader from "./live/LiveTripHeader";
 import CurrentStopCard from "./live/CurrentStopCard";
@@ -187,6 +187,22 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
 
   const handleContinue = () => {
     if (routeComplete || routeStops.length === 0) return;
+    const tid = tripData.tripId?.trim();
+    const stopId = currentStop?.id;
+    if (token && tid && stopId) {
+      void (async () => {
+        try {
+          await postTripStopCompleted(token, tid, stopId);
+        } catch (e) {
+          const msg =
+            e instanceof Error ? e.message : "Could not record stop on the server";
+          Alert.alert(
+            "Stop update",
+            `${msg}\n\nThe route will still advance. Parents may not have been notified.`
+          );
+        }
+      })();
+    }
     setCurrentStopIndex((i) => Math.min(i + 1, routeStops.length));
   };
 

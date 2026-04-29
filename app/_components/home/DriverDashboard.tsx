@@ -71,9 +71,13 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
 
     const tripStartPromise = captureTripStartSnapshot();
 
+    let serverTripId: string | undefined;
     if (token && Number.isFinite(busId) && Number.isFinite(routeId)) {
       try {
-        await postDriverTripStart(token, { busId, routeId });
+        const startRes = await postDriverTripStart(token, { busId, routeId });
+        const rawId = startRes?.trip?.id;
+        serverTripId =
+          rawId !== undefined && rawId !== null ? String(rawId) : undefined;
       } catch (e) {
         const msg =
           e instanceof Error ? e.message : "Could not register trip start on the server";
@@ -99,7 +103,11 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
     }
 
     const tripStart = await tripStartPromise;
-    setActiveTripData({ ...data, tripStart });
+    setActiveTripData({
+      ...data,
+      tripStart,
+      ...(serverTripId ? { tripId: serverTripId } : {}),
+    });
     setIsLive(true);
   };
 

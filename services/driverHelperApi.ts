@@ -118,6 +118,18 @@ export function getMyActiveTrip(token: string) {
 }
 
 /** Complete active trip (driver, or helper who has joined the trip — pass busId and routeId). */
+/** POST /bus/trips/:tripId/stops/:stopId/completed — notify parents when this route stop is completed. */
+export function postTripStopCompleted(
+  token: string,
+  tripId: string,
+  stopId: string
+) {
+  return apiRequest<{ notifiedParents: number }>(
+    `/api/v1/bus/trips/${encodeURIComponent(tripId)}/stops/${encodeURIComponent(stopId)}/completed`,
+    { method: "POST", token }
+  );
+}
+
 export function postDriverTripComplete(token: string, payload?: { busId?: number; routeId?: number }) {
   return apiRequest<{ trip: Record<string, unknown> }>("/api/v1/users/me/trip-complete", {
     method: "POST",

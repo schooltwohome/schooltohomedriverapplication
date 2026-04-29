@@ -4,6 +4,7 @@ import TripSetupWizard from "../driver-trip/TripSetupWizard";
 import LiveTripDashboard from "../driver-trip/LiveTripDashboard";
 import { captureTripStartSnapshot } from "../driver-trip/tripStartLocation";
 import { TripData } from "../driver-trip/types";
+import { publishCurrentLocationOnce } from "../../hooks/useLiveLocationReporter";
 import { useAppSelector } from "../../../store/hooks";
 import { assignmentToBusRoute } from "../../../lib/mapAssignment";
 import {
@@ -78,6 +79,9 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
         const rawId = startRes?.trip?.id;
         serverTripId =
           rawId !== undefined && rawId !== null ? String(rawId) : undefined;
+        void publishCurrentLocationOnce(token, busId).catch(() => {
+          /* keep trip-start UX non-blocking if first GPS publish fails */
+        });
       } catch (e) {
         const msg =
           e instanceof Error ? e.message : "Could not register trip start on the server";

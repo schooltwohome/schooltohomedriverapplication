@@ -102,7 +102,7 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
   };
   const rawBusId = tripData.bus?.id ? Number(tripData.bus.id) : NaN;
   const busIdForApi = Number.isFinite(rawBusId) ? rawBusId : null;
-  useLiveLocationReporter(true, token, busIdForApi);
+  const locationReporter = useLiveLocationReporter(true, token, busIdForApi);
 
   const routeId = tripData.route?.id ?? null;
   const busName = tripData.bus?.name || "Bus";
@@ -185,6 +185,19 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
       })} · ${tripStart.driverLocation ? "Start GPS saved" : "Start GPS unavailable"}`
     : undefined;
 
+  const gpsStatusLine = useMemo(() => {
+    switch (locationReporter.status) {
+      case "permission_denied":
+        return "GPS permission denied. Enable location permission to share live bus tracking.";
+      case "gps_unavailable":
+        return "GPS is off. Turn on location services to keep parents updated.";
+      case "post_failed":
+        return "Location updates are retrying. Check data/GPS if this persists.";
+      default:
+        return null;
+    }
+  }, [locationReporter.status]);
+
   const handleContinue = () => {
     if (routeComplete || routeStops.length === 0) return;
     const tid = tripData.tripId?.trim();
@@ -261,6 +274,12 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
             <TouchableOpacity style={styles.retryBtn} onPress={loadStops} accessibilityRole="button">
               <Text style={styles.retryBtnText}>Try again</Text>
             </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {gpsStatusLine ? (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>{gpsStatusLine}</Text>
           </View>
         ) : null}
 

@@ -47,9 +47,13 @@ export async function getExpoPushTokenOrNull(): Promise<string | null> {
   if (!Notifications) return null;
 
   if (Platform.OS === "android") {
+    // PUBLIC: show full content on lock screen; MAX importance: status bar + shade + heads-up.
     await Notifications.setNotificationChannelAsync("default", {
       name: "School updates",
-      importance: Notifications.AndroidImportance.HIGH,
+      importance: Notifications.AndroidImportance.MAX,
+      sound: "default",
+      lockscreenVisibility:
+        Notifications.AndroidNotificationVisibility.PUBLIC,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: "#0F172A",
     });
@@ -70,7 +74,12 @@ export async function getExpoPushTokenOrNull(): Promise<string | null> {
     const tokenRes = projectId
       ? await Notifications.getExpoPushTokenAsync({ projectId })
       : await Notifications.getExpoPushTokenAsync();
-    return tokenRes.data ?? null;
+    const token = tokenRes.data ?? null;
+    if (__DEV__ && token) {
+      const tail = token.length > 8 ? token.slice(-6) : "(short)";
+      console.log("[push] Expo push token suffix (dev only):", tail);
+    }
+    return token;
   } catch {
     return null;
   }

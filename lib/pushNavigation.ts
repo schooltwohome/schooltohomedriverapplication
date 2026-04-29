@@ -2,7 +2,6 @@ import type { PendingPushIntent } from "../store/slices/pushSlice";
 
 /**
  * Maps remote-notification `data` (same string keys as parent app / server) into shell behaviour.
- * Product note: confirm whether helpers/drivers receive parent-style trip pushes or staff-only payloads.
  */
 export function targetFromPushData(
   data: Record<string, unknown> | undefined | null
@@ -15,6 +14,12 @@ export function targetFromPushData(
     case "driver_assigned":
     case "trip_start_reminder":
     case "bus_approaching":
+    case "student_boarded":
+    case "stop_completed":
+    case "staff_trip_started":
+    case "staff_helper_joined":
+    case "staff_trip_aborted":
+    case "staff_driver_assigned":
       return { kind: "tab", tab: "home" };
     default:
       return { kind: "notifications" };

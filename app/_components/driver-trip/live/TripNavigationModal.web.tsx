@@ -9,6 +9,7 @@ interface Props {
   onClose: () => void;
   stopCoordinate: TripCoords;
   stopName: string;
+  remainingStopsOrdered?: Array<{ coordinate: TripCoords; name: string }>;
 }
 
 /** Web: maps are native-only; show copy instead of importing react-native-maps. */

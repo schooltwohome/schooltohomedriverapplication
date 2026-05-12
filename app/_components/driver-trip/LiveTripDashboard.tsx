@@ -180,6 +180,16 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
     [routeStops, currentStopIndex]
   );
 
+  /** Full remaining itinerary for in-app navigation (current stop → end). */
+  const navigationRemainingStops = useMemo(
+    () =>
+      routeStops.slice(currentStopIndex).map((s) => ({
+        coordinate: s.coordinate,
+        name: s.name,
+      })),
+    [routeStops, currentStopIndex]
+  );
+
   const currentStop = routeStops[currentStopIndex];
   const nextStop = routeStops[currentStopIndex + 1];
   const routeComplete =
@@ -366,6 +376,7 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
           onClose={() => setNavOpen(false)}
           stopCoordinate={currentStop.coordinate}
           stopName={currentStop.name}
+          remainingStopsOrdered={navigationRemainingStops}
         />
       ) : null}
     </View>

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal,
   View,
@@ -10,7 +10,7 @@ import {
   Alert,
   Animated,
 } from "react-native";
-import MapView, { Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, { Marker, MarkerAnimated, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
 import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,11 +20,22 @@ import { useAnimatedBusMarker } from "../../../hooks/useAnimatedBusMarker";
 import type { GeoPoint } from "../../../../types/tracking";
 import { haversineMeters } from "../../../../lib/geo";
 
+export type NavigationStopLeg = {
+  coordinate: TripCoords;
+  name: string;
+};
+
 interface Props {
   visible: boolean;
   onClose: () => void;
   stopCoordinate: TripCoords;
   stopName: string;
+  /**
+   * Ordered stops from the current leg through the end of the route.
+   * When set, Directions uses waypoints so the line follows roads through each stop
+   * instead of only driver → current.
+   */
+  remainingStopsOrdered?: NavigationStopLeg[];
 }
 
 function initialRegion(dest: TripCoords) {
@@ -69,7 +80,33 @@ function decodePolyline(encoded: string): TripCoords[] {
   return coordinates;
 }
 
-export default function TripNavigationModal({ visible, onClose, stopCoordinate, stopName }: Props) {
+function isValidCoord(c: TripCoords): boolean {
+  return (
+    Number.isFinite(c.latitude) &&
+    Number.isFinite(c.longitude) &&
+    !(c.latitude === 0 && c.longitude === 0)
+  );
+}
+
+function buildStopChain(
+  stopCoordinate: TripCoords,
+  stopName: string,
+  remainingStopsOrdered: NavigationStopLeg[] | undefined
+): NavigationStopLeg[] {
+  const raw =
+    remainingStopsOrdered && remainingStopsOrdered.length > 0
+      ? remainingStopsOrdered
+      : [{ coordinate: stopCoordinate, name: stopName }];
+  return raw.filter((s) => isValidCoord(s.coordinate));
+}
+
+export default function TripNavigationModal({
+  visible,
+  onClose,
+  stopCoordinate,
+  stopName,
+  remainingStopsOrdered,
+}: Props) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const lastDirectionsFetchAtRef = useRef(0);
@@ -84,6 +121,34 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
   const googleKey =
     (Constants.expoConfig?.extra as Record<string, unknown>)?.googleMapsApiKey ?? "";
 
+  const stopChain = useMemo(
+    () => buildStopChain(stopCoordinate, stopName, remainingStopsOrdered),
+    [stopCoordinate, stopName, remainingStopsOrdered]
+  );
+
+  const stopChainSig = useMemo(
+    () =>
+      stopChain
+        .map((s) => `${s.coordinate.latitude},${s.coordinate.longitude}`)
+        .join(";"),
+    [stopChain]
+  );
+
+  /** Google allows at most 25 intermediate waypoints between origin and destination. */
+  const chainForDirections = useMemo(() => {
+    if (stopChain.length <= 26) return stopChain;
+    return [...stopChain.slice(0, 25), stopChain[stopChain.length - 1]!];
+  }, [stopChain]);
+
+  const prevStopChainSigRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevStopChainSigRef.current === stopChainSig) return;
+    prevStopChainSigRef.current = stopChainSig;
+    setRouteCoords(null);
+    lastDirectionsFetchAtRef.current = 0;
+    lastDirectionsOriginRef.current = null;
+  }, [stopChainSig]);
+
   const markerState = useAnimatedBusMarker(driverLocation);
 
   const rotateInterpolation = markerState.rotation.interpolate({
@@ -92,10 +157,18 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
   });
 
   const openTurnByTurn = async () => {
-    const { latitude: lat, longitude: lng } = stopCoordinate;
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-      `${lat},${lng}`
-    )}&travelmode=driving`;
+    const chain = chainForDirections.length ? chainForDirections : stopChain;
+    if (chain.length === 0) return;
+    const last = chain[chain.length - 1]!.coordinate;
+    let url = "https://www.google.com/maps/dir/?api=1&travelmode=driving";
+    if (chain.length > 1) {
+      const wps = chain
+        .slice(0, -1)
+        .map((s) => `${s.coordinate.latitude},${s.coordinate.longitude}`)
+        .join("|");
+      url += `&waypoints=${encodeURIComponent(wps)}`;
+    }
+    url += `&destination=${encodeURIComponent(`${last.latitude},${last.longitude}`)}`;
     try {
       const ok = await Linking.canOpenURL(url);
       if (!ok) {
@@ -156,10 +229,10 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
       cancelled = true;
       subscription?.remove();
     };
-  }, [visible, stopCoordinate.latitude, stopCoordinate.longitude]);
+  }, [visible, stopChainSig]);
 
   useEffect(() => {
-    if (!visible || !driverLocation || !googleKey) {
+    if (!visible || !driverLocation || !googleKey || chainForDirections.length === 0) {
       setRouteCoords(null);
       return;
     }
@@ -175,10 +248,22 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
     }
 
     const origin = `${driverLocation.latitude},${driverLocation.longitude}`;
-    const dest = `${stopCoordinate.latitude},${stopCoordinate.longitude}`;
+    const lastStop = chainForDirections[chainForDirections.length - 1]!.coordinate;
+    const dest = `${lastStop.latitude},${lastStop.longitude}`;
+    let waypointsParam = "";
+    if (chainForDirections.length > 1) {
+      const wps = chainForDirections
+        .slice(0, -1)
+        .map((s) => `${s.coordinate.latitude},${s.coordinate.longitude}`)
+        .join("|");
+      waypointsParam = `&waypoints=${encodeURIComponent(wps)}`;
+    }
+
     const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(
       origin
-    )}&destination=${encodeURIComponent(dest)}&mode=driving&key=${encodeURIComponent(String(googleKey))}`;
+    )}&destination=${encodeURIComponent(dest)}&mode=driving${waypointsParam}&key=${encodeURIComponent(
+      String(googleKey)
+    )}`;
 
     let cancelled = false;
     (async () => {
@@ -198,13 +283,29 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
       }
     })();
 
-    return () => { cancelled = true; };
-  }, [visible, driverLocation, stopCoordinate.latitude, stopCoordinate.longitude, googleKey, routeCoords?.length]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    visible,
+    driverLocation,
+    googleKey,
+    routeCoords?.length,
+    stopChainSig,
+    chainForDirections,
+  ]);
 
   useEffect(() => {
     if (!visible || !mapRef.current) return;
-    const pts: TripCoords[] = routeCoords?.length ? routeCoords : [stopCoordinate];
-    if (!routeCoords?.length && driverLocation) pts.unshift(driverLocation);
+    const chainCoords = stopChain.map((s) => s.coordinate);
+    let pts: TripCoords[];
+    if (routeCoords?.length) {
+      pts = driverLocation ? [...routeCoords, driverLocation] : routeCoords;
+    } else if (driverLocation && chainCoords.length) {
+      pts = [driverLocation, ...chainCoords];
+    } else {
+      pts = chainCoords.length ? chainCoords : [stopCoordinate];
+    }
     const pad = {
       top: insets.top + 72,
       right: 28,
@@ -221,7 +322,7 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
       }
       mapRef.current?.fitToCoordinates(pts, { edgePadding: pad, animated: true });
     });
-  }, [visible, driverLocation, stopCoordinate, routeCoords, insets.top, insets.bottom]);
+  }, [visible, driverLocation, stopCoordinate, stopChain, routeCoords, insets.top, insets.bottom]);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -230,18 +331,24 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
           provider={PROVIDER_GOOGLE}
           ref={mapRef}
           style={StyleSheet.absoluteFill}
-          initialRegion={initialRegion(stopCoordinate)}
+          initialRegion={initialRegion(stopChain[0]?.coordinate ?? stopCoordinate)}
           showsUserLocation={false}
           showsMyLocationButton={false}
           loadingEnabled
         >
-          {/* Destination stop marker */}
-          <MapView.Marker coordinate={stopCoordinate} title={stopName} pinColor="#0F172A" />
+          {stopChain.map((s, i) => (
+            <Marker
+              key={`nav-stop-${i}-${s.coordinate.latitude}-${s.coordinate.longitude}`}
+              coordinate={s.coordinate}
+              title={s.name}
+              pinColor={i === 0 ? "#0F172A" : "#94A3B8"}
+            />
+          ))}
 
           {driverLocation ? (
             <>
               {/* Animated rotating driver marker */}
-              <MapView.Animated.Marker
+              <MarkerAnimated
                 coordinate={markerState.animatedRegion}
                 title="Your location"
                 anchor={{ x: 0.5, y: 0.5 }}
@@ -258,11 +365,13 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
                     <View style={styles.driverMarkerDot} />
                   </View>
                 </Animated.View>
-              </MapView.Animated.Marker>
+              </MarkerAnimated>
 
               <Polyline
                 coordinates={
-                  routeCoords?.length ? routeCoords : [driverLocation, stopCoordinate]
+                  routeCoords?.length
+                    ? routeCoords
+                    : [driverLocation, ...stopChain.map((s) => s.coordinate)]
                 }
                 strokeColor="#38BDF8"
                 strokeWidth={4}

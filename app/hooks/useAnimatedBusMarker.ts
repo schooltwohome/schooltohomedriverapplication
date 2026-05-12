@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Animated } from "react-native";
-import MapView from "react-native-maps";
+import { AnimatedRegion } from "react-native-maps";
 import { bearingDeg } from "../../lib/geo";
 import type { GeoPoint } from "../../types/tracking";
 
@@ -41,8 +41,8 @@ function animationDurationFromDistance(distanceMeters: number): number {
 }
 
 export type AnimatedBusMarkerState = {
-  /** Pass directly to `<MapView.Animated.Marker coordinate={animatedRegion}>`. */
-  animatedRegion: InstanceType<typeof MapView.AnimatedRegion>;
+  /** Pass directly to `<MarkerAnimated coordinate={animatedRegion}>`. */
+  animatedRegion: InstanceType<typeof AnimatedRegion>;
   /**
    * Current bearing as an `Animated.Value` (degrees 0–360).
    * Apply via `transform: [{ rotate: rotation.interpolate({...}) }]` on the icon View.
@@ -58,7 +58,7 @@ export type AnimatedBusMarkerState = {
  */
 export function useAnimatedBusMarker(location: GeoPoint | null): AnimatedBusMarkerState {
   const animatedRegion = useRef(
-    new MapView.AnimatedRegion({
+    new AnimatedRegion({
       latitude: location?.latitude ?? 0,
       longitude: location?.longitude ?? 0,
       latitudeDelta: 0,
@@ -110,7 +110,7 @@ export function useAnimatedBusMarker(location: GeoPoint | null): AnimatedBusMark
         longitudeDelta: 0,
         duration,
         useNativeDriver: false,
-      })
+      } as Parameters<InstanceType<typeof AnimatedRegion>["timing"]>[0])
       .start();
   }, [location, animatedRegion, rotation]);
 

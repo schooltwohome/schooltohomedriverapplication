@@ -338,7 +338,7 @@ export function registerMyPushDevice(
 
 export function postBusLocation(
   token: string,
-  payload: { busId: number; latitude: number; longitude: number; speed?: number }
+  payload: { busId: number; latitude: number; longitude: number; speed?: number; heading?: number }
 ) {
   return apiRequest<unknown>("/api/v1/bus/location", {
     method: "POST",
@@ -348,7 +348,22 @@ export function postBusLocation(
       latitude: payload.latitude,
       longitude: payload.longitude,
       ...(payload.speed !== undefined ? { speed: payload.speed } : {}),
+      ...(payload.heading !== undefined ? { heading: payload.heading } : {}),
     }),
+  });
+}
+
+export function postBusLocationBatch(
+  token: string,
+  payload: {
+    busId: number;
+    points: Array<{ latitude: number; longitude: number; speed?: number; heading?: number; capturedAtMs?: number }>;
+  }
+) {
+  return apiRequest<unknown>("/api/v1/bus/location/batch", {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
   });
 }
 

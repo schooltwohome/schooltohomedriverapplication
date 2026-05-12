@@ -3,7 +3,7 @@ module.exports = ({ config }) => {
     process.env.GOOGLE_MAPS_API_KEY?.trim() ||
     process.env.GOOGLE_MAPS_ANDROID_API_KEY?.trim() ||
     process.env.GOOGLE_MAPS_IOS_API_KEY?.trim() ||
-    "AIzaSyAnjJcugrzeD5rNrj5WFwLAV6wUTrF_Ag4";
+    undefined;
 
   const baseExpo = {
     ...(config || {}),
@@ -40,7 +40,10 @@ module.exports = ({ config }) => {
       permissions: [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.NFC" // ✅ keep NFC
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.NFC",
       ],
       package: "com.school2home.driverhelper",
       ...((config && config.android) || {}),
@@ -78,9 +81,14 @@ module.exports = ({ config }) => {
         "expo-location",
         {
           locationAlwaysAndWhenInUsePermission:
-            "Allow SchoolToHome to use your location to track your relative distance to the school bus.",
+            "SchoolToHome needs your location in the background so parents can track the bus while this app is minimised.",
+          locationWhenInUsePermission:
+            "SchoolToHome needs your location to report the bus position during an active trip.",
+          isAndroidBackgroundLocationEnabled: true,
+          isAndroidForegroundServiceEnabled: true,
         },
       ],
+      "expo-task-manager",
       "expo-secure-store",
       [
         "expo-notifications",

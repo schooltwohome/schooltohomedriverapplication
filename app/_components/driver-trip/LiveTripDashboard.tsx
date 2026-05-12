@@ -102,16 +102,30 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
   };
   const rawBusId = tripData.bus?.id ? Number(tripData.bus.id) : NaN;
   const busIdForApi = Number.isFinite(rawBusId) ? rawBusId : null;
-  const locationReporter = useLiveLocationReporter(true, token, busIdForApi);
+
+  const [routeStops, setRouteStops] = useState<RouteStop[]>([]);
+  const [stopsLoading, setStopsLoading] = useState(true);
+  const [stopsError, setStopsError] = useState<string | null>(null);
+
+  const routePolylineForDeviation = useMemo(
+    () =>
+      routeStops
+        .filter((s) => s.coordinate.latitude !== 0 && s.coordinate.longitude !== 0)
+        .map((s) => ({ latitude: s.coordinate.latitude, longitude: s.coordinate.longitude })),
+    [routeStops]
+  );
+
+  const locationReporter = useLiveLocationReporter(
+    true,
+    token,
+    busIdForApi,
+    routePolylineForDeviation
+  );
 
   const routeId = tripData.route?.id ?? null;
   const busName = tripData.bus?.name || "Bus";
   const tripStart = tripData.tripStart;
   const startedAtMs = tripStart?.startedAtMs ?? Date.now();
-
-  const [routeStops, setRouteStops] = useState<RouteStop[]>([]);
-  const [stopsLoading, setStopsLoading] = useState(true);
-  const [stopsError, setStopsError] = useState<string | null>(null);
 
   const loadStops = useCallback(async () => {
     if (!token || !routeId) {
@@ -283,6 +297,20 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
           </View>
         ) : null}
 
+        {locationReporter.pendingCount > 0 ? (
+          <View style={styles.uploadingChipWrap}>
+            <Text style={styles.uploadingChipText}>
+              Uploading ({locationReporter.pendingCount})
+            </Text>
+          </View>
+        ) : null}
+
+        {locationReporter.isDeviated ? (
+          <View style={styles.deviationBanner}>
+            <Text style={styles.deviationBannerText}>Bus appears off route</Text>
+          </View>
+        ) : null}
+
         {!stopsLoading && !stopsError && routeStops.length === 0 ? (
           <View style={styles.doneCard}>
             <Text style={styles.doneTitle}>No stops on this route</Text>
@@ -396,6 +424,36 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: Theme.border,
+  },
+  deviationBanner: {
+    backgroundColor: "#FEF3C7",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+  },
+  deviationBannerText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#92400E",
+    lineHeight: 20,
+  },
+  uploadingChipWrap: {
+    marginBottom: 12,
+    alignItems: "flex-start",
+  },
+  uploadingChipText: {
+    backgroundColor: "#FEF3C7",
+    color: "#92400E",
+    borderColor: "#F59E0B",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    fontSize: 12,
+    fontWeight: "700",
+    overflow: "hidden",
   },
   bannerText: {
     fontSize: 14,

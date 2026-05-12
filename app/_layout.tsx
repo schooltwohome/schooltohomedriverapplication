@@ -5,6 +5,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import Providers from "./providers";
 import { HelperAssignmentProvider } from "./_context/HelperAssignmentContext";
 import PushNotificationRoot from "./PushNotificationRoot";
+// Must be imported at root level so TaskManager can register the handler
+// before the OS wakes the app for a background location event.
+import "../lib/backgroundLocationTask";
 import "./global.css";
 
 export default function RootLayout() {

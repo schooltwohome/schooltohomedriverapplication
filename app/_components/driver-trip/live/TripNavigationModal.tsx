@@ -1,11 +1,24 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Modal, View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Linking, Alert } from "react-native";
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
+import {
+  Modal,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  Linking,
+  Alert,
+  Animated,
+} from "react-native";
+import MapView, { Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
 import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Navigation, X } from "lucide-react-native";
 import type { TripCoords } from "../types";
+import { useAnimatedBusMarker } from "../../../hooks/useAnimatedBusMarker";
+import type { GeoPoint } from "../../../../types/tracking";
+import { haversineMeters } from "../../../../lib/geo";
 
 interface Props {
   visible: boolean;
@@ -23,58 +36,66 @@ function initialRegion(dest: TripCoords) {
   };
 }
 
+function decodePolyline(encoded: string): TripCoords[] {
+  // Google's polyline algorithm (no deps).
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  const coordinates: TripCoords[] = [];
+  while (index < encoded.length) {
+    let result = 0;
+    let shift = 0;
+    let b: number;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = result & 1 ? ~(result >> 1) : result >> 1;
+    lat += dlat;
+
+    result = 0;
+    shift = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = result & 1 ? ~(result >> 1) : result >> 1;
+    lng += dlng;
+
+    coordinates.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+  }
+  return coordinates;
+}
+
 export default function TripNavigationModal({ visible, onClose, stopCoordinate, stopName }: Props) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
-  const [driver, setDriver] = useState<TripCoords | null>(null);
+  const lastDirectionsFetchAtRef = useRef(0);
+  const lastDirectionsOriginRef = useRef<GeoPoint | null>(null);
+
+  // Driver location as a plain ref so GPS updates don't force re-renders —
+  // the animated marker reads it via useAnimatedBusMarker.
+  const [driverLocation, setDriverLocation] = useState<GeoPoint | null>(null);
   const [waitingGps, setWaitingGps] = useState(true);
   const [routeCoords, setRouteCoords] = useState<TripCoords[] | null>(null);
 
   const googleKey =
-    (Constants.expoConfig?.extra as any)?.googleMapsApiKey ||
-    (Constants.manifest as any)?.extra?.googleMapsApiKey ||
-    "";
+    (Constants.expoConfig?.extra as Record<string, unknown>)?.googleMapsApiKey ?? "";
 
-  function decodePolyline(encoded: string): TripCoords[] {
-    // Google's polyline algorithm (no deps).
-    let index = 0;
-    let lat = 0;
-    let lng = 0;
-    const coordinates: TripCoords[] = [];
-    while (index < encoded.length) {
-      let result = 0;
-      let shift = 0;
-      let b: number;
-      do {
-        b = encoded.charCodeAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      const dlat = result & 1 ? ~(result >> 1) : result >> 1;
-      lat += dlat;
+  const markerState = useAnimatedBusMarker(driverLocation);
 
-      result = 0;
-      shift = 0;
-      do {
-        b = encoded.charCodeAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      const dlng = result & 1 ? ~(result >> 1) : result >> 1;
-      lng += dlng;
-
-      coordinates.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
-    }
-    return coordinates;
-  }
+  const rotateInterpolation = markerState.rotation.interpolate({
+    inputRange: [0, 360],
+    outputRange: ["0deg", "360deg"],
+  });
 
   const openTurnByTurn = async () => {
-    const lat = stopCoordinate.latitude;
-    const lng = stopCoordinate.longitude;
+    const { latitude: lat, longitude: lng } = stopCoordinate;
     const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
       `${lat},${lng}`
     )}&travelmode=driving`;
-
     try {
       const ok = await Linking.canOpenURL(url);
       if (!ok) {
@@ -89,7 +110,7 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
 
   useEffect(() => {
     if (!visible) {
-      setDriver(null);
+      setDriverLocation(null);
       setWaitingGps(true);
       setRouteCoords(null);
       return;
@@ -110,22 +131,20 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
           accuracy: Location.Accuracy.Balanced,
         });
         if (cancelled) return;
-        setDriver({
+        setDriverLocation({
           latitude: first.coords.latitude,
           longitude: first.coords.longitude,
         });
         setWaitingGps(false);
         subscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.Balanced,
-            distanceInterval: 12,
-            timeInterval: 4000,
-          },
+          { accuracy: Location.Accuracy.Balanced, distanceInterval: 12, timeInterval: 4000 },
           (loc) => {
-            setDriver({
-              latitude: loc.coords.latitude,
-              longitude: loc.coords.longitude,
-            });
+            if (!cancelled) {
+              setDriverLocation({
+                latitude: loc.coords.latitude,
+                longitude: loc.coords.longitude,
+              });
+            }
           }
         );
       } catch {
@@ -140,26 +159,32 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
   }, [visible, stopCoordinate.latitude, stopCoordinate.longitude]);
 
   useEffect(() => {
-    if (!visible) return;
-    if (!driver) {
-      setRouteCoords(null);
-      return;
-    }
-    if (!googleKey) {
-      // No key configured; fallback to straight line polyline.
+    if (!visible || !driverLocation || !googleKey) {
       setRouteCoords(null);
       return;
     }
 
-    const origin = `${driver.latitude},${driver.longitude}`;
+    const now = Date.now();
+    const lastOrigin = lastDirectionsOriginRef.current;
+    const movedMeters = lastOrigin ? haversineMeters(lastOrigin, driverLocation) : Infinity;
+    const sinceLastFetchMs = now - lastDirectionsFetchAtRef.current;
+    const shouldRefetch =
+      movedMeters >= 35 || sinceLastFetchMs >= 15_000 || !routeCoords?.length;
+    if (!shouldRefetch) {
+      return;
+    }
+
+    const origin = `${driverLocation.latitude},${driverLocation.longitude}`;
     const dest = `${stopCoordinate.latitude},${stopCoordinate.longitude}`;
     const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(
       origin
-    )}&destination=${encodeURIComponent(dest)}&mode=driving&key=${encodeURIComponent(googleKey)}`;
+    )}&destination=${encodeURIComponent(dest)}&mode=driving&key=${encodeURIComponent(String(googleKey))}`;
 
     let cancelled = false;
     (async () => {
       try {
+        lastDirectionsFetchAtRef.current = now;
+        lastDirectionsOriginRef.current = driverLocation;
         const res = await fetch(url);
         const json = await res.json();
         const pts = json?.routes?.[0]?.overview_polyline?.points;
@@ -173,15 +198,13 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [visible, driver, stopCoordinate.latitude, stopCoordinate.longitude, googleKey]);
+    return () => { cancelled = true; };
+  }, [visible, driverLocation, stopCoordinate.latitude, stopCoordinate.longitude, googleKey, routeCoords?.length]);
 
   useEffect(() => {
     if (!visible || !mapRef.current) return;
     const pts: TripCoords[] = routeCoords?.length ? routeCoords : [stopCoordinate];
-    if (!routeCoords?.length && driver) pts.unshift(driver);
+    if (!routeCoords?.length && driverLocation) pts.unshift(driverLocation);
     const pad = {
       top: insets.top + 72,
       right: 28,
@@ -191,19 +214,14 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
     requestAnimationFrame(() => {
       if (pts.length === 1) {
         mapRef.current?.animateToRegion(
-          {
-            latitude: pts[0].latitude,
-            longitude: pts[0].longitude,
-            latitudeDelta: 0.04,
-            longitudeDelta: 0.04,
-          },
+          { latitude: pts[0].latitude, longitude: pts[0].longitude, latitudeDelta: 0.04, longitudeDelta: 0.04 },
           250
         );
         return;
       }
       mapRef.current?.fitToCoordinates(pts, { edgePadding: pad, animated: true });
     });
-  }, [visible, driver, stopCoordinate, routeCoords, insets.top, insets.bottom]);
+  }, [visible, driverLocation, stopCoordinate, routeCoords, insets.top, insets.bottom]);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -217,16 +235,35 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
           showsMyLocationButton={false}
           loadingEnabled
         >
-          <Marker coordinate={stopCoordinate} title={stopName} pinColor="#0F172A" />
-          {driver ? (
+          {/* Destination stop marker */}
+          <MapView.Marker coordinate={stopCoordinate} title={stopName} pinColor="#0F172A" />
+
+          {driverLocation ? (
             <>
-              <Marker
-                coordinate={driver}
+              {/* Animated rotating driver marker */}
+              <MapView.Animated.Marker
+                coordinate={markerState.animatedRegion}
                 title="Your location"
-                pinColor="#38BDF8"
-              />
+                anchor={{ x: 0.5, y: 0.5 }}
+                tracksViewChanges={false}
+              >
+                <Animated.View
+                  style={[
+                    styles.driverMarkerWrap,
+                    { transform: [{ rotate: rotateInterpolation }] },
+                  ]}
+                >
+                  <View style={styles.driverMarkerCircle}>
+                    <View style={styles.driverMarkerPointer} />
+                    <View style={styles.driverMarkerDot} />
+                  </View>
+                </Animated.View>
+              </MapView.Animated.Marker>
+
               <Polyline
-                coordinates={routeCoords?.length ? routeCoords : [driver, stopCoordinate]}
+                coordinates={
+                  routeCoords?.length ? routeCoords : [driverLocation, stopCoordinate]
+                }
                 strokeColor="#38BDF8"
                 strokeWidth={4}
               />
@@ -264,7 +301,7 @@ export default function TripNavigationModal({ visible, onClose, stopCoordinate, 
           </TouchableOpacity>
         </View>
 
-        {waitingGps && !driver ? (
+        {waitingGps && !driverLocation ? (
           <View style={[styles.loading, { bottom: Math.max(insets.bottom, 16) + 24 }]}>
             <ActivityIndicator size="small" color="#0F172A" />
             <Text style={styles.loadingText}>Getting your location…</Text>
@@ -366,5 +403,44 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900",
     color: "#0F172A",
+  },
+  driverMarkerWrap: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  driverMarkerCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#38BDF8",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2.5,
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  driverMarkerPointer: {
+    position: "absolute",
+    top: -7,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderBottomWidth: 8,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderBottomColor: "#38BDF8",
+  },
+  driverMarkerDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
   },
 });

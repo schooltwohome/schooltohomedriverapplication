@@ -345,6 +345,49 @@ export default function TripNavigationModal({
             />
           ))}
 
+          {/* Base route polyline — connects stops in order, always visible once the
+              stop chain is known. Road-snapped line draws on top when ready. */}
+          {stopChain.length >= 2 ? (
+            <>
+              {/* Casing so the line pops on any map background */}
+              <Polyline
+                coordinates={stopChain.map((s) => s.coordinate)}
+                strokeColor="#1E3A5F"
+                strokeWidth={7}
+                lineCap="round"
+                lineJoin="round"
+              />
+              <Polyline
+                coordinates={stopChain.map((s) => s.coordinate)}
+                strokeColor="#93C5FD"
+                strokeWidth={4}
+                lineCap="round"
+                lineJoin="round"
+                lineDashPattern={[12, 6]}
+              />
+            </>
+          ) : null}
+
+          {/* Road-snapped polyline — replaces the dashed base line once Directions loads */}
+          {routeCoords?.length ? (
+            <>
+              <Polyline
+                coordinates={routeCoords}
+                strokeColor="#1E40AF"
+                strokeWidth={7}
+                lineCap="round"
+                lineJoin="round"
+              />
+              <Polyline
+                coordinates={routeCoords}
+                strokeColor="#38BDF8"
+                strokeWidth={4}
+                lineCap="round"
+                lineJoin="round"
+              />
+            </>
+          ) : null}
+
           {driverLocation ? (
             <>
               {/* Animated rotating driver marker */}
@@ -366,16 +409,6 @@ export default function TripNavigationModal({
                   </View>
                 </Animated.View>
               </MarkerAnimated>
-
-              <Polyline
-                coordinates={
-                  routeCoords?.length
-                    ? routeCoords
-                    : [driverLocation, ...stopChain.map((s) => s.coordinate)]
-                }
-                strokeColor="#38BDF8"
-                strokeWidth={4}
-              />
             </>
           ) : null}
         </MapView>

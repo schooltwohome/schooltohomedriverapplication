@@ -9,6 +9,8 @@ export interface TimelineStop {
   name: string;
   time: string;
   students: number;
+  /** Number of students already scanned as present at this stop. */
+  boardedStudents?: number;
   status: "completed" | "current" | "upcoming";
 }
 
@@ -56,7 +58,11 @@ export default function RouteProgressTimeline({ stops }: Props) {
                   {stop.name}
                 </Text>
                 <Text style={styles.timelineStopDetails}>
-                  {stop.time} · {stop.students} students
+                  {stop.time}
+                  {" · "}
+                  {typeof stop.boardedStudents === "number" && stop.boardedStudents > 0
+                    ? `${stop.boardedStudents} present / ${stop.students} students`
+                    : `${stop.students} students`}
                 </Text>
               </View>
             </View>

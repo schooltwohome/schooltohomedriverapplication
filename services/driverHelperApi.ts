@@ -207,6 +207,18 @@ export function postHelperTripJoin(
   });
 }
 
+/** POST /users/me/bus-terminate — cancel the active trip for a bus and reset it to available. */
+export function postBusTerminate(token: string, busId: number) {
+  return apiRequest<{ busId: number; status: "available" }>(
+    "/api/v1/users/me/bus-terminate",
+    {
+      method: "POST",
+      token,
+      body: JSON.stringify({ busId }),
+    }
+  );
+}
+
 /** GET /users/me/route-stops/:routeId — ordered stops with coordinates and per-stop student counts. */
 export type RouteStopsLiveResponse = {
   stops: Array<{

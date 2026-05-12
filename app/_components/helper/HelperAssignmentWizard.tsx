@@ -11,7 +11,7 @@ import { BusItem, RouteItem } from "../driver-trip/types";
 import { useTripSetupLists } from "../../hooks/useTripSetupLists";
 import { useAppDispatch, useAppSelector } from "../../../store/hooks";
 import { logoutThunk } from "../../../store/slices/authSlice";
-import { postHelperTripJoin } from "../../../services/driverHelperApi";
+import { postBusTerminate, postHelperTripJoin } from "../../../services/driverHelperApi";
 
 const TOTAL_STEPS = 2;
 
@@ -49,6 +49,7 @@ export default function HelperAssignmentWizard({ onComplete }: Props) {
   const [step, setStep] = useState<1 | 2>(1);
   const [selectedBus, setSelectedBus] = useState<BusItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [terminatingBusIds, setTerminatingBusIds] = useState<string[]>([]);
 
   const routesForSelectedBus = useMemo(() => {
     if (!selectedBus) return routes;
@@ -64,6 +65,36 @@ export default function HelperAssignmentWizard({ onComplete }: Props) {
     if (helperJoinableTrips.length === 0) return [];
     return Array.from(new Set(helperJoinableTrips.map((j) => String(j.bus_id))));
   }, [helperJoinableTrips]);
+
+  const handleTerminate = async (bus: BusItem) => {
+    if (!token) return;
+    const busId = Number(bus.id);
+    if (!Number.isFinite(busId)) return;
+
+    Alert.alert(
+      "Terminate bus?",
+      `This will cancel the active trip for ${bus.name} and mark it as available.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Terminate",
+          style: "destructive",
+          onPress: async () => {
+            setTerminatingBusIds((prev) => [...prev, String(bus.id)]);
+            try {
+              await postBusTerminate(token, busId);
+              await reloadLists();
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : "Could not terminate bus";
+              Alert.alert("Terminate failed", msg);
+            } finally {
+              setTerminatingBusIds((prev) => prev.filter((id) => id !== String(bus.id)));
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleBusNext = (bus: BusItem) => {
     setSelectedBus(bus);
@@ -179,6 +210,8 @@ export default function HelperAssignmentWizard({ onComplete }: Props) {
             onLogout={confirmLogout}
             extraHint={busPickerHint}
             forceEnabledBusIds={joinableBusIds}
+            onTerminate={handleTerminate}
+            terminatingBusIds={terminatingBusIds}
           />
         )}
         {step === 2 && (

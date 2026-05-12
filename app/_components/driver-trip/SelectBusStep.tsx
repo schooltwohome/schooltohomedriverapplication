@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bus, Users, Wrench, AlertCircle, CheckCircle2, LogOut } from 'lucide-react-native';
+import { Bus, Users, Wrench, AlertCircle, CheckCircle2, LogOut, XCircle } from 'lucide-react-native';
 import { Theme } from '../../_theme/theme';
 import { BusItem, BusStatus } from './types';
 
@@ -24,6 +24,13 @@ interface Props {
    * Used for helper join flow where the driver has started a trip (bus is "In Use").
    */
   forceEnabledBusIds?: string[];
+  /**
+   * Called when the helper taps "Terminate" on an "In Use" bus.
+   * The parent component should cancel the active trip and reload buses.
+   */
+  onTerminate?: (bus: BusItem) => void;
+  /** Bus IDs currently being terminated (shows spinner on that card). */
+  terminatingBusIds?: string[];
 }
 
 export default function SelectBusStep({
@@ -37,6 +44,8 @@ export default function SelectBusStep({
   hideStepLabel = false,
   onLogout,
   forceEnabledBusIds,
+  onTerminate,
+  terminatingBusIds = [],
 }: Props) {
   const insets = useSafeAreaInsets();
   const scrollBottomPad = Math.max(insets.bottom, 20);
@@ -102,36 +111,60 @@ export default function SelectBusStep({
         {!loading && buses.map((bus) => {
           const isForcedEnabled = forceEnabledBusIds?.includes(String(bus.id)) ?? false;
           const isAvailable = bus.status === 'Available' || isForcedEnabled;
+          const isInUse = bus.status === 'In Use';
+          const isTerminating = terminatingBusIds.includes(String(bus.id));
+          const showTerminate = isInUse && !!onTerminate;
           return (
-            <TouchableOpacity 
-              key={bus.id}
-              style={[styles.busCard, !isAvailable && styles.busCardDisabled]}
-              disabled={!isAvailable}
-              activeOpacity={0.7}
-              onPress={() => onNext(bus)}
-            >
-              <View style={styles.busIconContainer}>
-                <Bus size={24} color={isAvailable ? Theme.yellowDark : Theme.textMuted} />
-              </View>
-              
-              <View style={styles.busDetails}>
-                <Text style={styles.busName}>{bus.name}</Text>
-                <Text style={styles.licensePlate}>{bus.licensePlate}</Text>
-                <View style={styles.seatsContainer}>
-                  <Users size={14} color={Theme.textMuted} />
-                  <Text style={styles.seatsText}>{bus.seats} seats</Text>
+            <View key={bus.id} style={[styles.busCard, !isAvailable && styles.busCardDisabled]}>
+              <TouchableOpacity
+                style={styles.busCardInner}
+                disabled={!isAvailable}
+                activeOpacity={0.7}
+                onPress={() => onNext(bus)}
+              >
+                <View style={styles.busIconContainer}>
+                  <Bus size={24} color={isAvailable ? Theme.yellowDark : Theme.textMuted} />
                 </View>
-              </View>
 
-              <View style={styles.statusContainer}>
-                <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(bus.status)}15` }]}>
-                  {getStatusIcon(bus.status)}
-                  <Text style={[styles.statusText, { color: getStatusColor(bus.status) }]}>
-                    {bus.status}
-                  </Text>
+                <View style={styles.busDetails}>
+                  <Text style={styles.busName}>{bus.name}</Text>
+                  <Text style={styles.licensePlate}>{bus.licensePlate}</Text>
+                  <View style={styles.seatsContainer}>
+                    <Users size={14} color={Theme.textMuted} />
+                    <Text style={styles.seatsText}>{bus.seats} seats</Text>
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
+
+                <View style={styles.statusContainer}>
+                  <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(bus.status)}15` }]}>
+                    {getStatusIcon(bus.status)}
+                    <Text style={[styles.statusText, { color: getStatusColor(bus.status) }]}>
+                      {bus.status}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              {showTerminate && (
+                <TouchableOpacity
+                  style={[styles.terminateBtn, isTerminating && styles.terminateBtnBusy]}
+                  disabled={isTerminating}
+                  activeOpacity={0.75}
+                  onPress={() => onTerminate(bus)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Terminate bus ${bus.name}`}
+                >
+                  {isTerminating ? (
+                    <ActivityIndicator size="small" color="#B91C1C" />
+                  ) : (
+                    <XCircle size={15} color="#B91C1C" />
+                  )}
+                  <Text style={styles.terminateBtnText}>
+                    {isTerminating ? 'Terminating…' : 'Terminate bus'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           );
         })}
         {onLogout ? (
@@ -240,9 +273,6 @@ const styles = StyleSheet.create({
   busCard: {
     backgroundColor: Theme.bg,
     borderRadius: 20,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
     borderWidth: 1.5,
     borderColor: Theme.border,
     shadowColor: '#000',
@@ -250,10 +280,35 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 10,
     elevation: 2,
+    overflow: 'hidden',
   },
   busCardDisabled: {
     backgroundColor: Theme.bgMuted,
     opacity: 0.65,
+  },
+  busCardInner: {
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  terminateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+  },
+  terminateBtnBusy: {
+    opacity: 0.6,
+  },
+  terminateBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#B91C1C',
   },
   busIconContainer: {
     width: 48,

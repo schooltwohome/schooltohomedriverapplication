@@ -16,8 +16,8 @@ import { TripData, TripCoords } from "./types";
 import { useAppDispatch, useAppSelector } from "../../../store/hooks";
 import { logoutThunk } from "../../../store/slices/authSlice";
 import { useLiveLocationReporter } from "../../hooks/useLiveLocationReporter";
-import { getRouteStopsLive, postTripStopCompleted } from "../../../services/driverHelperApi";
-import type { RouteStopsLiveResponse } from "../../../services/driverHelperApi";
+import { getRouteStopsLive, getRouteRoster, postTripStopCompleted } from "../../../services/driverHelperApi";
+import type { RouteStopsLiveResponse, RouteRosterStudent } from "../../../services/driverHelperApi";
 import LiveTripHeader from "./live/LiveTripHeader";
 import CurrentStopCard from "./live/CurrentStopCard";
 import NextStopRow from "./live/NextStopRow";
@@ -58,7 +58,11 @@ function mapApiStopToRouteStop(
   };
 }
 
-function buildTimeline(stops: RouteStop[], currentIndex: number): TimelineStop[] {
+function buildTimeline(
+  stops: RouteStop[],
+  currentIndex: number,
+  boardedByStop: Map<string, number>
+): TimelineStop[] {
   const pastEnd = currentIndex >= stops.length;
   return stops.map((s, i) => {
     let status: TimelineStop["status"];
@@ -66,7 +70,9 @@ function buildTimeline(stops: RouteStop[], currentIndex: number): TimelineStop[]
     else if (i < currentIndex) status = "completed";
     else if (i === currentIndex) status = "current";
     else status = "upcoming";
-    return { id: s.id, name: s.name, time: s.time, students: s.students, status };
+    const stopKey = s.name?.trim().toLowerCase() ?? "";
+    const boarded = stopKey ? (boardedByStop.get(stopKey) ?? 0) : 0;
+    return { id: s.id, name: s.name, time: s.time, students: s.students, boardedStudents: boarded, status };
   });
 }
 
@@ -106,6 +112,10 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
   const [routeStops, setRouteStops] = useState<RouteStop[]>([]);
   const [stopsLoading, setStopsLoading] = useState(true);
   const [stopsError, setStopsError] = useState<string | null>(null);
+
+  // Roster — tracks which students are boarded/present so the header and
+  // timeline show a live present count instead of always "0/X".
+  const [rosterStudents, setRosterStudents] = useState<RouteRosterStudent[]>([]);
 
   const routePolylineForDeviation = useMemo(
     () =>
@@ -151,6 +161,38 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
     loadStops();
   }, [loadStops]);
 
+  const loadRoster = useCallback(async () => {
+    if (!token || !routeId) return;
+    try {
+      const busIdStr = busIdForApi != null ? String(busIdForApi) : undefined;
+      const res = await getRouteRoster(token, routeId, busIdStr);
+      setRosterStudents(res.students);
+    } catch {
+      // Non-critical — keep the last known roster; the header will show the
+      // last accurate count rather than resetting to zero on a transient error.
+    }
+  }, [token, routeId, busIdForApi]);
+
+  // Initial roster load.
+  useEffect(() => {
+    void loadRoster();
+  }, [loadRoster]);
+
+  // Re-fetch roster whenever the driver advances to a new stop — students are
+  // scanned at each stop, so the count is most likely to change at that moment.
+  useEffect(() => {
+    void loadRoster();
+  // currentStopIndex intentionally in deps — we want a fresh fetch on each advance.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStopIndex]);
+
+  // Periodic background refresh so the count stays in sync with NFC scans.
+  useEffect(() => {
+    if (!token || !routeId) return;
+    const id = setInterval(() => void loadRoster(), 30_000);
+    return () => clearInterval(id);
+  }, [token, routeId, loadRoster]);
+
   const totalStudentsOnStops = useMemo(
     () => routeStops.reduce((sum, s) => sum + s.students, 0),
     [routeStops]
@@ -175,9 +217,27 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
     );
   }, [routeStops.length]);
 
+  // Count students the driver/helper has already scanned as present.
+  const boardedCount = useMemo(
+    () => rosterStudents.filter((s) => s.status === "present").length,
+    [rosterStudents]
+  );
+
+  // Map stop name (lower-cased) → present student count for the timeline rows.
+  const boardedByStop = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of rosterStudents) {
+      if (s.status === "present") {
+        const key = (s.stop_name ?? "").trim().toLowerCase();
+        if (key) map.set(key, (map.get(key) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [rosterStudents]);
+
   const timelineStops = useMemo(
-    () => buildTimeline(routeStops, currentStopIndex),
-    [routeStops, currentStopIndex]
+    () => buildTimeline(routeStops, currentStopIndex, boardedByStop),
+    [routeStops, currentStopIndex, boardedByStop]
   );
 
   /** Full remaining itinerary for in-app navigation (current stop → end). */
@@ -200,7 +260,7 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
     : `${currentStopIndex + 1}/${routeStops.length}`;
 
   const boardedFraction =
-    boardedDenominator > 0 ? `0/${boardedDenominator}` : "0/0";
+    boardedDenominator > 0 ? `${boardedCount}/${boardedDenominator}` : "0/0";
 
   const tripStartedLine = tripStart
     ? `Started ${new Date(tripStart.startedAtMs).toLocaleTimeString([], {

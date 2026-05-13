@@ -110,7 +110,13 @@ export default function SelectBusStep({
 
         {!loading && buses.map((bus) => {
           const isForcedEnabled = forceEnabledBusIds?.includes(String(bus.id)) ?? false;
-          const isAvailable = bus.status === 'Available' || isForcedEnabled;
+          // When forceEnabledBusIds is provided (helper join flow), ONLY buses that the
+          // driver has explicitly made joinable are selectable — regardless of status.
+          // This prevents helpers from tapping genuinely-idle "Available" buses that
+          // have no active trip to join yet.
+          const isAvailable = forceEnabledBusIds !== undefined
+            ? isForcedEnabled
+            : bus.status === 'Available';
           const isInUse = bus.status === 'In Use';
           const isTerminating = terminatingBusIds.includes(String(bus.id));
           const showTerminate = isInUse && !!onTerminate;

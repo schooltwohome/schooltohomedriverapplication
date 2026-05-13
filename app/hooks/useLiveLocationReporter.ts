@@ -119,6 +119,7 @@ export function useLiveLocationReporter(
   const [lastErrorAtMs, setLastErrorAtMs] = useState<number | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [isDeviated, setIsDeviated] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<GeoPoint | null>(null);
   const prevEnabledRef = useRef(enabled);
 
   useEffect(() => {
@@ -187,6 +188,7 @@ export function useLiveLocationReporter(
             capturedAtMs: firstPoint.atMs,
           });
           lastEnqueuedRef.current = firstPoint;
+          setCurrentLocation({ latitude: first.coords.latitude, longitude: first.coords.longitude });
           await doFlush();
           setStatus("tracking");
         }
@@ -217,19 +219,24 @@ export function useLiveLocationReporter(
             longitude: loc.coords.longitude,
             atMs: Date.now(),
           };
-          if (shouldSkipDuplicate(lastEnqueuedRef.current, point)) return;
-          await enqueue({
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-            speedKmh:
-              loc.coords.speed != null && loc.coords.speed >= 0
-                ? loc.coords.speed * 3.6
-                : null,
-            heading: loc.coords.heading ?? null,
-            capturedAtMs: point.atMs,
-          });
-          lastEnqueuedRef.current = point;
-          await refreshQueueCount();
+          if (!shouldSkipDuplicate(lastEnqueuedRef.current, point)) {
+            await enqueue({
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+              speedKmh:
+                loc.coords.speed != null && loc.coords.speed >= 0
+                  ? loc.coords.speed * 3.6
+                  : null,
+              heading: loc.coords.heading ?? null,
+              capturedAtMs: point.atMs,
+            });
+            lastEnqueuedRef.current = point;
+            await refreshQueueCount();
+          }
+
+          if (!cancelled) {
+            setCurrentLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+          }
 
           const poly = routePolylineRef.current;
           if (poly && poly.length >= 2) {
@@ -254,6 +261,7 @@ export function useLiveLocationReporter(
       stopBackgroundLocationUpdates();
       setPendingCount(0);
       setIsDeviated(false);
+      setCurrentLocation(null);
       setStatus("idle");
     };
   }, [enabled, token, busIdNum]);
@@ -274,8 +282,10 @@ export function useLiveLocationReporter(
       pendingCount,
       /** True when the bus is more than DEVIATION_THRESHOLD_METERS from the nearest route polyline segment. */
       isDeviated,
+      /** Most recent GPS fix from the foreground watcher. Null until the first fix arrives. */
+      currentLocation,
     }),
-    [status, lastErrorAtMs, pendingCount, isDeviated]
+    [status, lastErrorAtMs, pendingCount, isDeviated, currentLocation]
   );
 }
 

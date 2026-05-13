@@ -70,42 +70,35 @@ export default function DriverDashboard({ onLiveTripChange }: DriverDashboardPro
     const busId = data.bus?.id != null ? Number(data.bus.id) : NaN;
     const routeId = data.route?.id != null ? Number(data.route.id) : NaN;
 
-    const tripStartPromise = captureTripStartSnapshot();
-
     let serverTripId: string | undefined;
-    if (token && Number.isFinite(busId) && Number.isFinite(routeId)) {
-      try {
-        const startRes = await postDriverTripStart(token, { busId, routeId });
-        const rawId = startRes?.trip?.id;
-        serverTripId =
-          rawId !== undefined && rawId !== null ? String(rawId) : undefined;
-        void publishCurrentLocationOnce(token, busId).catch(() => {
-          /* keep trip-start UX non-blocking if first GPS publish fails */
-        });
-      } catch (e) {
-        const msg =
-          e instanceof Error ? e.message : "Could not register trip start on the server";
-        if (e instanceof ApiHttpError && e.status === 409) {
-          Alert.alert("Route unavailable", msg);
-          return;
-        }
-        Alert.alert(
-          "Could not notify parents",
-          `${msg}\n\nYour trip will still open. Check your connection or try ending the trip and starting again.`
-        );
+    if (!token) {
+      Alert.alert("Trip start", "You are not signed in. Please sign in to start a live trip.");
+      return;
+    }
+    if (!Number.isFinite(busId) || !Number.isFinite(routeId)) {
+      Alert.alert("Trip start", "Bus or route is missing. Please reselect and try again.");
+      return;
+    }
+    try {
+      const startRes = await postDriverTripStart(token, { busId, routeId });
+      const rawId = startRes?.trip?.id;
+      serverTripId =
+        rawId !== undefined && rawId !== null ? String(rawId) : undefined;
+      void publishCurrentLocationOnce(token, busId).catch(() => {
+        /* keep trip-start UX non-blocking if first GPS publish fails */
+      });
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "Could not register trip start on the server";
+      if (e instanceof ApiHttpError && e.status === 409) {
+        Alert.alert("Route unavailable", msg);
+        return;
       }
-    } else if (!token) {
-      Alert.alert(
-        "Trip start",
-        "You are not signed in. Parents will not receive a start notification."
-      );
-    } else {
-      Alert.alert(
-        "Trip start",
-        "Bus or route is missing. Parents will not receive a start notification."
-      );
+      Alert.alert("Could not start trip", msg);
+      return;
     }
 
+    const tripStartPromise = captureTripStartSnapshot();
     const tripStart = await tripStartPromise;
     setActiveTripData({
       ...data,

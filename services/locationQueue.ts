@@ -121,6 +121,7 @@ export async function flush(token: string, busId: number): Promise<void> {
             longitude: item.longitude,
             speed: item.speedKmh ?? undefined,
             heading: item.heading ?? undefined,
+            capturedAtMs: item.capturedAtMs,
           });
         } catch {
           const nextAttempts = item.attempts + 1;

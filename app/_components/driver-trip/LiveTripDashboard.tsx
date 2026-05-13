@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import { logoutThunk } from "../../../store/slices/authSlice";
 import { useLiveLocationReporter } from "../../hooks/useLiveLocationReporter";
 import { getRouteStopsLive, getRouteRoster, postTripStopCompleted } from "../../../services/driverHelperApi";
 import type { RouteStopsLiveResponse, RouteRosterStudent } from "../../../services/driverHelperApi";
+import { haversineMeters } from "../../../lib/geo";
 import LiveTripHeader from "./live/LiveTripHeader";
 import CurrentStopCard from "./live/CurrentStopCard";
 import NextStopRow from "./live/NextStopRow";
@@ -82,6 +83,9 @@ function formatElapsed(startedAtMs: number): string {
   const s = sec % 60;
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
+
+/** Radius in metres within which the bus is considered to have arrived at a stop. */
+const ARRIVAL_RADIUS_METERS = 50;
 
 export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
   const dispatch = useAppDispatch();
@@ -203,6 +207,9 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
   const [elapsed, setElapsed] = useState(() => formatElapsed(startedAtMs));
   const [currentStopIndex, setCurrentStopIndex] = useState(0);
   const [navOpen, setNavOpen] = useState(false);
+  const [arrivedBanner, setArrivedBanner] = useState<string | null>(null);
+  // Tracks stop IDs that have already been auto-advanced to prevent duplicate triggers.
+  const autoAdvancedStopIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -282,7 +289,7 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
     }
   }, [locationReporter.status]);
 
-  const handleContinue = () => {
+  const handleContinue = useCallback((silent = false) => {
     if (routeComplete || routeStops.length === 0) return;
     const tid = tripData.tripId?.trim();
     const stopId = currentStop?.id;
@@ -291,17 +298,38 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
         try {
           await postTripStopCompleted(token, tid, stopId);
         } catch (e) {
-          const msg =
-            e instanceof Error ? e.message : "Could not record stop on the server";
-          Alert.alert(
-            "Stop update",
-            `${msg}\n\nThe route will still advance. Parents may not have been notified.`
-          );
+          if (!silent) {
+            const msg =
+              e instanceof Error ? e.message : "Could not record stop on the server";
+            Alert.alert(
+              "Stop update",
+              `${msg}\n\nThe route will still advance. Parents may not have been notified.`
+            );
+          }
         }
       })();
     }
     setCurrentStopIndex((i) => Math.min(i + 1, routeStops.length));
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeComplete, routeStops.length, currentStop?.id, token, tripData.tripId]);
+
+  // Auto-advance to the next stop when the bus physically arrives within ARRIVAL_RADIUS_METERS.
+  useEffect(() => {
+    if (routeComplete || !currentStop || !currentStop.navigateEnabled) return;
+    const busLoc = locationReporter.currentLocation;
+    if (!busLoc) return;
+    if (autoAdvancedStopIdsRef.current.has(currentStop.id)) return;
+
+    const dist = haversineMeters(busLoc, currentStop.coordinate);
+    if (dist <= ARRIVAL_RADIUS_METERS) {
+      autoAdvancedStopIdsRef.current.add(currentStop.id);
+      setArrivedBanner(currentStop.name);
+      handleContinue(true);
+      // Clear the banner after 3 seconds.
+      const t = setTimeout(() => setArrivedBanner(null), 3_000);
+      return () => clearTimeout(t);
+    }
+  }, [locationReporter.currentLocation, currentStop, routeComplete, handleContinue]);
 
   const continueLabel = routeComplete
     ? routeStops.length === 0
@@ -358,6 +386,12 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
             <TouchableOpacity style={styles.retryBtn} onPress={loadStops} accessibilityRole="button">
               <Text style={styles.retryBtnText}>Try again</Text>
             </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {arrivedBanner ? (
+          <View style={styles.arrivedBanner}>
+            <Text style={styles.arrivedBannerText}>Arrived at {arrivedBanner} — stop completed</Text>
           </View>
         ) : null}
 
@@ -495,6 +529,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: Theme.border,
+  },
+  arrivedBanner: {
+    backgroundColor: "#D1FAE5",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#34D399",
+  },
+  arrivedBannerText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#065F46",
+    lineHeight: 20,
   },
   deviationBanner: {
     backgroundColor: "#FEF3C7",

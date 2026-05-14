@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LogOut } from "lucide-react-native";
@@ -19,6 +20,10 @@ import { useLiveLocationReporter } from "../../hooks/useLiveLocationReporter";
 import { getRouteStopsLive, getRouteRoster, postTripStopCompleted } from "../../../services/driverHelperApi";
 import type { RouteStopsLiveResponse, RouteRosterStudent } from "../../../services/driverHelperApi";
 import { haversineMeters } from "../../../lib/geo";
+import {
+  getTrackingLogs,
+  subscribeTrackingLogs,
+} from "../../../lib/trackingLogger";
 import LiveTripHeader from "./live/LiveTripHeader";
 import CurrentStopCard from "./live/CurrentStopCard";
 import NextStopRow from "./live/NextStopRow";
@@ -208,6 +213,8 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
   const [currentStopIndex, setCurrentStopIndex] = useState(0);
   const [navOpen, setNavOpen] = useState(false);
   const [arrivedBanner, setArrivedBanner] = useState<string | null>(null);
+  const [showDebugLogs, setShowDebugLogs] = useState(false);
+  const [debugLogs, setDebugLogs] = useState(() => getTrackingLogs(8));
   // Tracks stop IDs that have already been auto-advanced to prevent duplicate triggers.
   const autoAdvancedStopIdsRef = useRef<Set<string>>(new Set());
 
@@ -288,6 +295,18 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
         return null;
     }
   }, [locationReporter.status]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeTrackingLogs(() => {
+      setDebugLogs(getTrackingLogs(8));
+    });
+    setDebugLogs(getTrackingLogs(8));
+    return unsubscribe;
+  }, []);
+
+  const openAppSettings = useCallback(() => {
+    void Linking.openSettings().catch(() => {});
+  }, []);
 
   const handleContinue = useCallback((silent = false) => {
     if (routeComplete || routeStops.length === 0) return;
@@ -398,6 +417,9 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
         {gpsStatusLine ? (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>{gpsStatusLine}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={openAppSettings} accessibilityRole="button">
+              <Text style={styles.retryBtnText}>Open app settings</Text>
+            </TouchableOpacity>
           </View>
         ) : null}
 
@@ -414,6 +436,33 @@ export default function LiveTripDashboard({ tripData, onEndTrip }: Props) {
             <Text style={styles.deviationBannerText}>Bus appears off route</Text>
           </View>
         ) : null}
+
+        <View style={styles.debugWrap}>
+          <TouchableOpacity
+            onPress={() => setShowDebugLogs((prev) => !prev)}
+            style={styles.debugToggle}
+            accessibilityRole="button"
+            accessibilityLabel="Toggle tracking debug logs"
+          >
+            <Text style={styles.debugToggleText}>
+              {showDebugLogs ? "Hide" : "Show"} GPS debug logs
+            </Text>
+          </TouchableOpacity>
+          {showDebugLogs ? (
+            <View style={styles.debugPanel}>
+              {debugLogs.length === 0 ? (
+                <Text style={styles.debugLine}>No tracking logs yet.</Text>
+              ) : (
+                debugLogs.map((entry) => (
+                  <Text key={entry.id} style={styles.debugLine}>
+                    {new Date(entry.createdAtMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}{" "}
+                    [{entry.level}] {entry.event}
+                  </Text>
+                ))
+              )}
+            </View>
+          ) : null}
+        </View>
 
         {!stopsLoading && !stopsError && routeStops.length === 0 ? (
           <View style={styles.doneCard}>
@@ -633,6 +682,37 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Theme.textSecondary,
     lineHeight: 22,
+    fontWeight: "600",
+  },
+  debugWrap: {
+    marginBottom: 14,
+  },
+  debugToggle: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#F8FAFC",
+  },
+  debugToggleText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#334155",
+  },
+  debugPanel: {
+    marginTop: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#0F172A",
+    padding: 10,
+    gap: 4,
+  },
+  debugLine: {
+    fontSize: 11,
+    color: "#E2E8F0",
     fontWeight: "600",
   },
 });

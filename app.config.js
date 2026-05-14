@@ -19,6 +19,10 @@ module.exports = ({ config }) => {
     ios: {
       supportsTablet: true,
       ...((config && config.ios) || {}),
+      infoPlist: {
+        ...(((config && config.ios) || {}).infoPlist || {}),
+        UIBackgroundModes: ["location"],
+      },
       config: {
         ...(((config && config.ios) || {}).config || {}),
         googleMapsApiKey:
@@ -43,6 +47,8 @@ module.exports = ({ config }) => {
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.IGNORE_BATTERY_OPTIMIZATIONS",
+        "android.permission.WAKE_LOCK",
         "android.permission.NFC",
       ],
       package: "com.school2home.driverhelper",
@@ -81,6 +87,8 @@ module.exports = ({ config }) => {
         "expo-location",
         {
           locationAlwaysAndWhenInUsePermission:
+            "SchoolToHome needs your location in the background so parents can track the bus while this app is minimised.",
+          locationAlwaysPermission:
             "SchoolToHome needs your location in the background so parents can track the bus while this app is minimised.",
           locationWhenInUsePermission:
             "SchoolToHome needs your location to report the bus position during an active trip.",

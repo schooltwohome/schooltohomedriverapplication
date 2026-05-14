@@ -2,6 +2,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { QueuedLocationPoint } from "../types/tracking";
 import { postBusLocation, postBusLocationBatch } from "./driverHelperApi";
 import { ApiHttpError } from "./http";
+import {
+  logTrackingError,
+  logTrackingInfo,
+  logTrackingWarn,
+} from "../lib/trackingLogger";
 
 const QUEUE_KEY = "@sth:locQueue";
 const MAX_QUEUE_SIZE = 500;
@@ -44,9 +49,58 @@ export async function enqueue(point: Omit<QueuedLocationPoint, "attempts">): Pro
   const entry: QueuedLocationPoint = { ...point, attempts: 0 };
   const next = [...current, entry];
   if (next.length > MAX_QUEUE_SIZE) {
+    logTrackingWarn("queue_overflow_trimmed", "Dropped oldest queued points due to queue size limit", {
+      before: next.length,
+      max: MAX_QUEUE_SIZE,
+    });
     next.splice(0, next.length - MAX_QUEUE_SIZE);
   }
   await writeQueue(next);
+  logTrackingInfo("queue_enqueued", "Location point added to offline queue", {
+    depth: next.length,
+    latitude: point.latitude,
+    longitude: point.longitude,
+    capturedAtMs: point.capturedAtMs,
+    accuracyFiltered: true,
+  });
+}
+
+/**
+ * Sends a GPS point to the server immediately (no batching/no timer delay).
+ * If the network call fails, the point is persisted in the offline queue.
+ */
+export async function sendImmediateOrQueue(
+  token: string,
+  busId: number,
+  point: Omit<QueuedLocationPoint, "attempts">
+): Promise<{ sent: boolean }> {
+  try {
+    await postBusLocation(token, {
+      busId,
+      latitude: point.latitude,
+      longitude: point.longitude,
+      speed: point.speedKmh ?? undefined,
+      heading: point.heading ?? undefined,
+      capturedAtMs: point.capturedAtMs,
+    });
+    logTrackingInfo("location_sent_immediate", "Sent GPS point to server immediately", {
+      busId,
+      latitude: point.latitude,
+      longitude: point.longitude,
+      capturedAtMs: point.capturedAtMs,
+    });
+    return { sent: true };
+  } catch (err: unknown) {
+    await enqueue(point);
+    logTrackingWarn("location_queued_after_send_fail", "Immediate send failed; queued GPS point offline", {
+      busId,
+      latitude: point.latitude,
+      longitude: point.longitude,
+      capturedAtMs: point.capturedAtMs,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { sent: false };
+  }
 }
 
 /**
@@ -75,6 +129,10 @@ export async function flush(token: string, busId: number): Promise<void> {
   try {
     const items = await readQueue();
     if (items.length === 0) return;
+    logTrackingInfo("queue_flush_started", "Starting offline queue flush", {
+      busId,
+      queued: items.length,
+    });
 
     const eligible = items.filter((i) => i.attempts < MAX_ATTEMPTS);
     const remaining: QueuedLocationPoint[] = [];
@@ -95,10 +153,17 @@ export async function flush(token: string, busId: number): Promise<void> {
             })),
           });
           // Whole chunk succeeded — none go back into the queue.
+          logTrackingInfo("queue_flush_batch_sent", "Sent location batch successfully", {
+            busId,
+            batchSize: chunk.length,
+          });
           continue;
         } catch (err: unknown) {
           if (err instanceof ApiHttpError && err.status === 404) {
             batchUnsupported = true;
+            logTrackingWarn("queue_batch_endpoint_missing", "Batch endpoint unavailable; falling back to single-point posts", {
+              busId,
+            });
             // Fall through to individual POSTs below.
           } else {
             // Non-404 batch failure: increment attempts on every item in the chunk.
@@ -106,6 +171,10 @@ export async function flush(token: string, busId: number): Promise<void> {
             for (const item of chunk) {
               remaining.push({ ...item, attempts: item.attempts + 1 });
             }
+            logTrackingWarn("queue_flush_batch_failed", "Batch post failed; points retained for retry", {
+              busId,
+              batchSize: chunk.length,
+            });
             await sleep(delay);
             continue;
           }
@@ -123,10 +192,31 @@ export async function flush(token: string, busId: number): Promise<void> {
             heading: item.heading ?? undefined,
             capturedAtMs: item.capturedAtMs,
           });
+          logTrackingInfo("queue_flush_single_sent", "Sent queued location point", {
+            busId,
+            latitude: item.latitude,
+            longitude: item.longitude,
+            capturedAtMs: item.capturedAtMs,
+          });
         } catch {
           const nextAttempts = item.attempts + 1;
           if (nextAttempts < MAX_ATTEMPTS) {
             remaining.push({ ...item, attempts: nextAttempts });
+            logTrackingWarn("queue_flush_single_failed", "Location send failed; kept for retry", {
+              busId,
+              latitude: item.latitude,
+              longitude: item.longitude,
+              attempts: nextAttempts,
+              capturedAtMs: item.capturedAtMs,
+            });
+          } else {
+            logTrackingError("queue_point_dropped", "Dropped location after max retry attempts", {
+              busId,
+              latitude: item.latitude,
+              longitude: item.longitude,
+              attempts: nextAttempts,
+              capturedAtMs: item.capturedAtMs,
+            });
           }
           const delay = BACKOFF_DELAYS_MS[item.attempts] ?? BACKOFF_DELAYS_MS.at(-1)!;
           await sleep(delay);
@@ -135,6 +225,11 @@ export async function flush(token: string, busId: number): Promise<void> {
     }
 
     await writeQueue(remaining);
+    logTrackingInfo("queue_flush_finished", "Finished offline queue flush", {
+      busId,
+      remaining: remaining.length,
+      sent: Math.max(0, eligible.length - remaining.length),
+    });
   } finally {
     flushInProgress = false;
   }

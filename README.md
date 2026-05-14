@@ -48,3 +48,8 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## Native config verification
+
+- Run `npm run verify:native-config` to validate required Android/iOS location and background-tracking keys.
+- If your branch does not include `android/` or `ios/`, run `npx expo prebuild --no-install` first, then run the verifier again.

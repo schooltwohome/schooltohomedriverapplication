@@ -1,9 +1,16 @@
 import * as TaskManager from "expo-task-manager";
 import * as Location from "expo-location";
 import Constants from "expo-constants";
-import { enqueue, flush } from "../services/locationQueue";
+import { enqueue, flush, sendImmediateOrQueue } from "../services/locationQueue";
+import {
+  logTrackingError,
+  logTrackingInfo,
+  logTrackingWarn,
+} from "./trackingLogger";
 
 export const BACKGROUND_LOCATION_TASK = "BACKGROUND_LOCATION_TASK";
+const MAX_ACCEPTABLE_ACCURACY_METERS = 50;
+const MAX_BUS_SPEED_KMH = 120;
 
 /**
  * Task credentials are stored in module-level refs so the TaskManager callback
@@ -31,6 +38,9 @@ export function clearBackgroundTaskCredentials(): void {
  */
 TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
   if (error) {
+    logTrackingError("bg_task_error", "Background location task failed", {
+      message: error.message,
+    });
     if (__DEV__) console.warn("[BGLocationTask] error:", error.message);
     return;
   }
@@ -42,26 +52,76 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
   const busId = _busId;
 
   for (const loc of locations) {
-    await enqueue({
+    const accuracy = typeof loc.coords.accuracy === "number" ? loc.coords.accuracy : null;
+    if (accuracy != null && accuracy > MAX_ACCEPTABLE_ACCURACY_METERS) {
+      logTrackingWarn("bg_location_dropped_low_accuracy", "Dropped background location with poor accuracy", {
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        accuracy,
+        timestamp: loc.timestamp,
+      });
+      continue;
+    }
+    const speedKmh =
+      loc.coords.speed != null && loc.coords.speed >= 0
+        ? loc.coords.speed * 3.6
+        : null;
+    if (speedKmh != null && speedKmh > MAX_BUS_SPEED_KMH) {
+      logTrackingWarn("bg_location_dropped_speed_glitch", "Dropped background GPS spike due to impossible speed", {
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        speedKmh,
+        timestamp: loc.timestamp,
+      });
+      continue;
+    }
+    if (token && busId !== null) {
+      await sendImmediateOrQueue(token, busId, {
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        speedKmh,
+        // Heading from device compass — captured in background so the bus marker
+        // continues rotating correctly even when the driver app is backgrounded.
+        heading:
+          loc.coords.heading != null && loc.coords.heading >= 0
+            ? loc.coords.heading
+            : null,
+        capturedAtMs: loc.timestamp,
+      });
+    } else {
+      // No credentials yet (cold-start race): persist only; flush runs when creds become available.
+      await enqueue({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        speedKmh,
+        heading:
+          loc.coords.heading != null && loc.coords.heading >= 0
+            ? loc.coords.heading
+            : null,
+        capturedAtMs: loc.timestamp,
+      });
+    }
+    logTrackingInfo("bg_location_processed", "Processed background location fix", {
       latitude: loc.coords.latitude,
       longitude: loc.coords.longitude,
-      speedKmh:
-        loc.coords.speed != null && loc.coords.speed >= 0
-          ? loc.coords.speed * 3.6
-          : null,
-      // Heading from device compass — captured in background so the bus marker
-      // continues rotating correctly even when the driver app is backgrounded.
-      heading:
-        loc.coords.heading != null && loc.coords.heading >= 0
-          ? loc.coords.heading
-          : null,
-      capturedAtMs: loc.timestamp,
+      accuracy: loc.coords.accuracy ?? null,
+      timestamp: loc.timestamp,
     });
   }
 
   // Flush immediately while the app has background execution time.
   if (token && busId !== null) {
-    await flush(token, busId);
+    try {
+      await flush(token, busId);
+      logTrackingInfo("bg_flush_ok", "Flushed queued background locations", {
+        busId,
+      });
+    } catch (err: unknown) {
+      logTrackingWarn("bg_flush_failed", "Failed to flush background queue", {
+        busId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 });
 
